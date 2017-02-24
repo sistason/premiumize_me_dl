@@ -137,7 +137,7 @@ class PremiumizeMeDownloader:
                 pass
 
             transfer_time = time.time() - start_time
-            logging.info('Download finished, took {.2}s, at {.2}MB/s'.format(
+            logging.info('Download finished, took {:2}s, at {:2}MB/s'.format(
                 transfer_time, file_.size_in_mb/transfer_time))
             return True
         else:
