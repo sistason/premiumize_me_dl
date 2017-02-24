@@ -3,12 +3,12 @@ import datetime
 import requests
 import logging
 import zipfile
+import shutil
 import time
 import json
 import sys
 import os
 import re
-from tqdm import tqdm
 
 
 class File:
@@ -73,7 +73,7 @@ class PremiumizeMeDownloader:
         return ret
 
     def download_files(self, file_regexes):
-        search_re = re.compile(r'{}'.format('|'.join(file_regexes)))
+        search_re = re.compile(r'(?i){}'.format('|'.join(file_regexes)))
         files_deleted = []
         file_list = self._get_list_of_files()
         for file_ in file_list:
@@ -94,9 +94,20 @@ class PremiumizeMeDownloader:
             logging.error('Error while getting file-list. Was: {}'.format(ret_j.get('message')))
             return []
 
-        return [File(properties_) for properties_ in ret_j.get('content', [])]
+        return [File(properties_) for properties_ in ret_j.get('content', []) if properties_]
 
     def _download_file(self, file_):
+        path_ = os.path.join(self.download_directory, file_.name)
+        if os.path.exists(path_):
+            try:
+                size_ = self._get_size(path_)
+            except OSError as e:
+                logging.warning('Could not get size of file "{}": {}'.format(file_.name, e))
+                size_ = 0
+            print(size_, file_.size)
+            if file_.size*0.999 < size_ < file_.size*1.001:
+                logging.info('Skipped "{}",get already exists'.format(file_.name))
+                return True
         ret = self._make_request('https://www.premiumize.me/api/torrent/browse?hash={}'.format(str(file_.hash)[2:]))
         ret_j = json.loads(ret)
         zip_dl_link = ret_j.get('zip', '')
@@ -105,16 +116,26 @@ class PremiumizeMeDownloader:
         return self._download(file_, zip_dl_link)
 
     def _download(self, file_, link):
+        start_time = time.time()
         r = requests.get(link, data=self.login_data, stream=True)
         if r.ok:
             file_destination = os.path.join(self.download_directory, file_.name+'.zip')
             with open(file_destination, 'wb') as f:
-                for data in tqdm(r.iter_content(), total=file_.size, unit='B', unit_scale=True):
-                    f.write(data)
+                # FIXME: PYSSL-bug, unimaginably slow with iter_content() and https :(
+                # for data in tqdm(r.iter_content(), total=file_.size, unit='B', unit_scale=True):
+                r.raw.decode_content = True
+                shutil.copyfileobj(r.raw, f)
 
-            z = zipfile.ZipFile(file_destination)
-            z.extractall(path=self.download_directory)
-            # os.remove(f)
+            try:
+                z = zipfile.ZipFile(file_destination)
+                z.extractall(path=self.download_directory)
+                os.remove(file_destination)
+            except Exception:
+                pass
+
+            transfer_time = time.time() - start_time
+            logging.info('Download finished, took {.2}s, at {.2}MB/s'.format(
+                transfer_time, file_.size_in_mb/transfer_time))
             return True
         else:
             logging.error('Download of "{}" failed, returned "{}"!'.format(link, r.status_code))
@@ -126,6 +147,12 @@ class PremiumizeMeDownloader:
             return True
         logging.error('Could not delete file {}: {}'.format(file_, ret))
 
+    def _get_size(self, path_):
+        size_ = 0
+        for entry in os.scandir(path_):
+            size_ += self._get_size(entry.path) if entry.is_dir() else os.path.getsize(entry.path)
+
+        return size_
 
 if __name__ == '__main__':
     import argparse
@@ -137,7 +164,6 @@ if __name__ == '__main__':
         raise argparse.ArgumentTypeError('{} is no directory or isn\'t writeable'.format(string))
 
     def argcheck_re(string):
-        print(string)
         try:
             re.compile(string)
             return string
