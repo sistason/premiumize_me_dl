@@ -121,7 +121,8 @@ class PremiumizeMeDownloader:
         if r.ok:
             file_destination = os.path.join(self.download_directory, file_.name+'.zip')
             with open(file_destination, 'wb') as f:
-                # FIXME: PYSSL-bug, unimaginably slow with iter_content() and https :(
+                # FIXME: PYSSL-bug, unimaginably slow with iter_content() and https. So no progress-bar :(
+                # import tqdm
                 # for data in tqdm(r.iter_content(), total=file_.size, unit='B', unit_scale=True):
                 r.raw.decode_content = True
                 shutil.copyfileobj(r.raw, f)
@@ -148,11 +149,9 @@ class PremiumizeMeDownloader:
         logging.error('Could not delete file {}: {}'.format(file_, ret))
 
     def _get_size(self, path_):
-        size_ = 0
-        for entry in os.scandir(path_):
-            size_ += self._get_size(entry.path) if entry.is_dir() else os.path.getsize(entry.path)
-
-        return size_
+        if not os.path.isdir(path_):
+            return os.path.getsize(path_)
+        return sum(self._get_size(entry.path) for entry in os.scandir(path_))
 
 if __name__ == '__main__':
     import argparse
