@@ -15,7 +15,7 @@ class File:
     def __init__(self, properties):
         try:
             self.id = int(properties.get('id', 0))
-            self.hash = hex(int(properties.get('hash', 0x0), base=16))
+            self.hash = properties.get('hash', '')
             self.size = int(properties.get('size', 0))
             self.size_in_mb = int(self.size/1024/1024)
             self.name = properties.get('name', '')
@@ -100,17 +100,19 @@ class PremiumizeMeDownloader:
         path_ = os.path.join(self.download_directory, file_.name)
         if os.path.exists(path_):
             try:
-                size_ = self._get_size(path_)
+                if file_.size * 0.999 < self._get_size(path_) < file_.size * 1.001:
+                    logging.info('Skipped "{}",get already exists'.format(file_.name))
+                    return True
             except OSError as e:
                 logging.warning('Could not get size of file "{}": {}'.format(file_.name, e))
-                size_ = 0
-            print(size_, file_.size)
-            if file_.size*0.999 < size_ < file_.size*1.001:
-                logging.info('Skipped "{}",get already exists'.format(file_.name))
-                return True
-        ret = self._make_request('https://www.premiumize.me/api/torrent/browse?hash={}'.format(str(file_.hash)[2:]))
+
+        ret = self._make_request('https://www.premiumize.me/api/torrent/browse?hash={}'.format(file_.hash))
         ret_j = json.loads(ret)
+
         zip_dl_link = ret_j.get('zip', '')
+        if  not zip_dl_link or ret_j.get('status','') == 'error':
+            logging.warning('Could not download file "{}": {}'.format(file_.name, ret_j.get('message', '')))
+            return False
 
         logging.info('Downloading {} ({} MB)...'.format(file_.name+'.zip', file_.size_in_mb))
         return self._download(file_, zip_dl_link)
