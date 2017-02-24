@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 import datetime
 import requests
 import logging
@@ -30,9 +30,9 @@ class File:
 
 
 class PremiumizeMeDownloader:
-    def __init__(self, download_directory, delete_after_download=False, auth=''):
+    def __init__(self, download_directory, delete_after_download_days=0, auth=''):
         logging.getLogger("requests").setLevel(logging.WARNING)
-        self.delete_after_download = delete_after_download
+        self.delete_after = datetime.timedelta(days=delete_after_download_days)
         self.download_directory = download_directory
 
         self.username, self.password = self._read_auth(auth)
@@ -41,17 +41,18 @@ class PremiumizeMeDownloader:
         self.login_data = {'customer_id': self.username, 'pin': self.password}
 
     def download_files(self, file_regexes):
+        now = datetime.datetime.now()
         search_re = re.compile(r'(?i){}'.format('|'.join(file_regexes)))
         files_deleted = []
         file_list = self._get_list_of_files()
         for file_ in file_list:
             if search_re.search(file_.name):
                 success = self._download_file(file_)
-                if success and self.delete_after_download:
+                if success and self.delete_after and file_.created_at+self.delete_after < now:
                     self._delete_file(file_)
                     files_deleted.append(file_)
 
-        if self.delete_after_download:
+        if self.delete_after:
             [file_list.remove(d) for d in files_deleted]
             logging.info('Remaining files in "My Files":  {}'.format(file_list))
 
@@ -78,7 +79,7 @@ class PremiumizeMeDownloader:
         ret_j = json.loads(ret)
 
         zip_dl_link = ret_j.get('zip', '')
-        if  not zip_dl_link or ret_j.get('status','') == 'error':
+        if not zip_dl_link or ret_j.get('status', '') == 'error':
             logging.warning('Could not download file "{}": {}'.format(file_.name, ret_j.get('message', '')))
             return False
 
@@ -101,8 +102,8 @@ class PremiumizeMeDownloader:
                 z = zipfile.ZipFile(file_destination)
                 z.extractall(path=self.download_directory)
                 os.remove(file_destination)
-            except Exception:
-                pass
+            except zipfile.error as e:
+                logging.warning('Unzipping of "{}" failed: {}'.format(file_destination, e))
 
             transfer_time = time.time() - start_time
             logging.info('Download finished, took {:.2}s, at {:.2}MByte/s'.format(
@@ -178,7 +179,7 @@ if __name__ == '__main__':
                            help='Set the directory to download the file(s) into.')
     argparser.add_argument('-a', '--auth', type=str, required=True,
                            help="Either 'user:password' or a path to a pw-file with that format")
-    argparser.add_argument('-d', '--delete_after_download', action="store_true",
+    argparser.add_argument('-d', '--delete_after_download_days', type=int, default=0,
                            help="Delete files from My Files after successful download")
 
     args = argparser.parse_args()
@@ -187,5 +188,5 @@ if __name__ == '__main__':
                         level=logging.INFO)
 
     dl = PremiumizeMeDownloader(args.download_directory,
-                                delete_after_download=args.delete_after_download, auth=args.auth)
+                                delete_after_download_days=args.delete_after_download_days, auth=args.auth)
     dl.download_files(args.files)
