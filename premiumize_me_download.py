@@ -40,38 +40,6 @@ class PremiumizeMeDownloader:
             sys.exit(1)
         self.login_data = {'customer_id': self.username, 'pin': self.password}
 
-    @staticmethod
-    def _read_auth(auth):
-        if auth and os.path.exists(auth):
-            with open(auth, 'r') as f:
-                auth = f.read()
-
-        if not (auth and ':' in auth):
-            logging.error('No ":" found in authentication information, login not possible!')
-            return None, None
-
-        username, password = auth.strip().split(':')
-        return username, password
-
-    def _make_request(self, url, data=None):
-        """ Do a request, take care of the cookies, timeouts and exceptions """
-        data_ = self.login_data
-        if data is not None:
-            data_.update(data)
-        ret = ''
-        retries = 3
-        while not ret and retries > 0:
-            try:
-                r_ = requests.post(url, data=data_, timeout=2)
-                ret = r_.text
-            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError):
-                retries -= 1
-                time.sleep(1)
-            except Exception as e:
-                logging.debug('Caught Exception "{}" while making a get-request to "{}"'.format(e.__class__, url))
-                break
-        return ret
-
     def download_files(self, file_regexes):
         search_re = re.compile(r'(?i){}'.format('|'.join(file_regexes)))
         files_deleted = []
@@ -137,7 +105,7 @@ class PremiumizeMeDownloader:
                 pass
 
             transfer_time = time.time() - start_time
-            logging.info('Download finished, took {:2}s, at {:2}MB/s'.format(
+            logging.info('Download finished, took {:.2}s, at {:.2}MByte/s'.format(
                 transfer_time, file_.size_in_mb/transfer_time))
             return True
         else:
@@ -150,10 +118,42 @@ class PremiumizeMeDownloader:
             return True
         logging.error('Could not delete file {}: {}'.format(file_, ret))
 
+    def _make_request(self, url, data=None):
+        """ Do a request, take care of the cookies, timeouts and exceptions """
+        data_ = self.login_data
+        if data is not None:
+            data_.update(data)
+        ret = ''
+        retries = 3
+        while not ret and retries > 0:
+            try:
+                r_ = requests.post(url, data=data_, timeout=2)
+                ret = r_.text
+            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError):
+                retries -= 1
+                time.sleep(1)
+            except Exception as e:
+                logging.debug('Caught Exception "{}" while making a get-request to "{}"'.format(e.__class__, url))
+                break
+        return ret
+
     def _get_size(self, path_):
         if not os.path.isdir(path_):
             return os.path.getsize(path_)
         return sum(self._get_size(entry.path) for entry in os.scandir(path_))
+
+    @staticmethod
+    def _read_auth(auth):
+        if auth and os.path.exists(auth):
+            with open(auth, 'r') as f:
+                auth = f.read()
+
+        if not (auth and ':' in auth):
+            logging.error('No ":" found in authentication information, login not possible!')
+            return None, None
+
+        username, password = auth.strip().split(':')
+        return username, password
 
 if __name__ == '__main__':
     import argparse
@@ -176,10 +176,10 @@ if __name__ == '__main__':
                            help='Download all files matching these (python) regular expressions.')
     argparser.add_argument('download_directory', type=argcheck_dir, default='.',
                            help='Set the directory to download the file(s) into.')
+    argparser.add_argument('-a', '--auth', type=str, required=True,
+                           help="Either 'user:password' or a path to a pw-file with that format")
     argparser.add_argument('-d', '--delete_after_download', action="store_true",
                            help="Delete files from My Files after successful download")
-    argparser.add_argument('-a', '--auth', type=str,
-                           help="Either 'user:password' or a path to a pw-file with that format")
 
     args = argparser.parse_args()
 
