@@ -54,7 +54,7 @@ class PremiumizeMeDownloader:
 
         if self.delete_after:
             [file_list.remove(d) for d in files_deleted]
-            logging.info('Remaining files in "My Files":  {}'.format(file_list))
+            logging.info('Remaining files in "My Files":  {}'.format([str(f) for f in file_list]))
 
     def _get_list_of_files(self):
         ret = self._make_request('https://www.premiumize.me/api/folder/list')
@@ -155,6 +155,13 @@ class PremiumizeMeDownloader:
 
         username, password = auth.strip().split(':')
         return username, password
+
+    def upload(self, torrent):
+        ret = self._make_request("https://www.premiumize.me/api/transfer/create?type=torrent&src={}".format(torrent))
+        if 'success' in ret:
+            return True
+        logging.error('Could not add torrent {}: {}'.format(torrent, ret))
+
 
 if __name__ == '__main__':
     import argparse
