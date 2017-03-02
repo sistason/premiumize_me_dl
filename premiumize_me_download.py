@@ -30,7 +30,7 @@ class File:
 
 
 class PremiumizeMeDownloader:
-    def __init__(self, download_directory, delete_after_download_days=0, auth=''):
+    def __init__(self, download_directory, auth, delete_after_download_days=0):
         logging.getLogger("requests").setLevel(logging.WARNING)
         self.delete_after = datetime.timedelta(days=delete_after_download_days)
         self.download_directory = download_directory
@@ -194,6 +194,6 @@ if __name__ == '__main__':
     logging.basicConfig(format='%(message)s',
                         level=logging.INFO)
 
-    dl = PremiumizeMeDownloader(args.download_directory,
-                                delete_after_download_days=args.delete_after_download_days, auth=args.auth)
+    dl = PremiumizeMeDownloader(args.download_directory, args.auth,
+                                delete_after_download_days=args.delete_after_download_days)
     dl.download_files(args.files)
