@@ -188,6 +188,8 @@ if __name__ == '__main__':
                            help="Either 'user:password' or a path to a pw-file with that format")
     argparser.add_argument('-d', '--delete_after_download_days', type=int, default=0,
                            help="Delete files from My Files after successful download")
+    argparser.add_argument('-u', '--upload', action='store_true',
+                           help="Dont't download files, but upload the given files")
 
     args = argparser.parse_args()
 
@@ -196,4 +198,7 @@ if __name__ == '__main__':
 
     dl = PremiumizeMeDownloader(args.download_directory, args.auth,
                                 delete_after_download_days=args.delete_after_download_days)
-    dl.download_files(args.files)
+    if args.upload:
+        [dl.upload(f) for f in args.files]
+    else:
+        dl.download_files(args.files)
