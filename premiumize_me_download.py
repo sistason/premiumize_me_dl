@@ -106,7 +106,7 @@ class PremiumizeMeDownloader:
                 logging.warning('Unzipping of "{}" failed: {}'.format(file_destination, e))
 
             transfer_time = time.time() - start_time
-            logging.info('Download finished, took {:.2}s, at {:.2}MByte/s'.format(
+            logging.info('Download finished, took {:.5}s, at {:.4}MByte/s'.format(
                 transfer_time, file_.size_in_mb/transfer_time))
             return True
         else:
