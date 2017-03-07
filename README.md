@@ -11,6 +11,7 @@ python3 premiumize_me_download.py files [files, ...] dir [-a auth] [-d]
  - -d: Set to delete successfully downloaded files from premiumize.me
  
  ## Dependencies
- - python 3.5
- - python3-requests
+ - python 3.5+ (asyncio)
+ - python3-aiohttp
+ - python3-aiodns
  - A valid premiumize.me account with Premium ;)
