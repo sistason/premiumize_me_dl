@@ -12,25 +12,64 @@ import os
 import re
 
 
-class File:
+class PremiumizeItem:
     def __init__(self, properties):
         try:
-            self.id = int(properties.get('id', 0))
+            self.error = properties.get('error', '')
+            self.status = properties.get('status', '')
+            self.message = properties.get('message')
+
+            self.id = properties.get('id', '')
             self.hash = properties.get('hash', '')
             self.size = int(properties.get('size', 0))
             self.size_in_mb = int(self.size/1024/1024)
             self.name = properties.get('name', '')
-            self.created_at = datetime.datetime.fromtimestamp(int(properties.get('created_at', 0)))
             self.type = properties.get('type', '')
-        except (ValueError, IndexError, AttributeError):
+
+            self.created_at = datetime.datetime.fromtimestamp(int(properties.get('created_at', 0)))
+
+            self.ratio = properties.get('ratio', 0)
+            self.progress = properties.get('progress', 0.0)
+            self.leecher = properties.get('leecher')
+            self.seeder = properties.get('seeder')
+            self.speed_down = properties.get('speed_down')
+            self.speed_up = properties.get('speed_up')
+            self.eta = properties.get('eta')
+        except (ValueError, IndexError, AttributeError) as e:
+            logging.error('Could not parse {}: {}'.format(self.__class__, e))
             del self
             return
 
+
+class File(PremiumizeItem):
     def matches(self, regexes, hashes):
         return regexes.search(self.name) or self.hash in hashes
 
     def __str__(self):
         return '{s.id}: {s.name} ({s.size_in_mb}MB) {s.hash}'.format(s=self)
+
+
+class Upload(PremiumizeItem):
+    def __init__(self, url, properties):
+        super().__init__(properties)
+        self.url = url
+
+    def worked(self):
+        return self.status == 'success' and not self.error
+
+    def __str__(self):
+        return '{s.name}: {s.hash}'.format(s=self) if self.worked() else '{}:\t{}'.format(self.url, self.error)
+
+
+class Transfer(PremiumizeItem):
+    def is_running(self):
+        return self.status == 'waiting'
+
+    def status_msg(self):
+        return self.status if self.status != 'waiting' else self.message
+
+    def __str__(self):
+        return '{}: {}'.format(self.name, self.status_msg())
 
 
 class PremiumizeMeDownloader:
@@ -46,14 +85,13 @@ class PremiumizeMeDownloader:
         self.aiohttp_session = None
 
         self.username, self.password = self._read_auth(auth)
-        if not self.username:
-            sys.exit(1)
         self.login_data = {'customer_id': self.username, 'pin': self.password}
 
     def close(self):
         self.aiohttp_session.close()
 
-    def _parse_filters(self, filters):
+    @staticmethod
+    def _parse_filters(filters):
         hashes = [f for f in filters if re.match(r'[0-9a-fA-F]{40}$', f)]
         regexes = re.compile('|'.join(r for r in filters if r not in hashes), re.IGNORECASE)
         return regexes, hashes
@@ -62,19 +100,19 @@ class PremiumizeMeDownloader:
         now = datetime.datetime.now()
         regexes, hashes = self._parse_filters(filters)
         files_deleted = []
-        file_list = await self._get_list_of_files()
+        file_list = await self.get_list_of_files()
         for file_ in file_list:
             if file_.matches(regexes, hashes):
                 success = await self._download_file(file_)
                 if success and self.delete_after and file_.created_at+self.delete_after < now:
-                    await self.delete_file(file_)
+                    await self.delete(file_)
                     files_deleted.append(file_)
 
         if self.delete_after:
             [file_list.remove(d) for d in files_deleted]
             logging.info('Remaining files in "My Files":  {}'.format([str(f) for f in file_list]))
 
-    async def _get_list_of_files(self):
+    async def get_list_of_files(self):
         ret = await self._make_request('/folder/list')
         ret_j = json.loads(ret)
         if 'error' in ret_j:
@@ -82,6 +120,15 @@ class PremiumizeMeDownloader:
             return []
 
         return [File(properties_) for properties_ in ret_j.get('content', []) if properties_]
+
+    async def get_transfers(self):
+        ret = await self._make_request('/transfer/list')
+        ret_j = json.loads(ret)
+        if 'error' in ret_j:
+            logging.error('Error while getting file-list. Was: {}'.format(ret_j.get('message')))
+            return []
+
+        return [Transfer(properties_) for properties_ in ret_j.get('transfers', []) if properties_]
 
     async def _download_file(self, file_):
         path_ = os.path.join(self.download_directory, file_.name)
@@ -102,9 +149,9 @@ class PremiumizeMeDownloader:
             return False
 
         logging.info('Downloading {} ({} MB)...'.format(file_.name+'.zip', file_.size_in_mb))
-        return await self._download(file_, zip_dl_link)
+        return await self.download_file(file_, zip_dl_link)
 
-    async def _download(self, file_, link):
+    async def download_file(self, file_, link):
         async with self.max_simultaneous_downloads:
             start_time = time.time()
             async with self.aiohttp_session.get(link, data=self.login_data) as response:
@@ -135,23 +182,13 @@ class PremiumizeMeDownloader:
         except zipfile.error as e:
             logging.warning('Unzipping of "{}" failed: {}'.format(file_destination, e))
 
-    """
-        r = requests.get(link, data=self.login_data, stream=True)
-        if r.ok:
-            file_destination = os.path.join(self.download_directory, file_.name+'.zip')
-            with open(file_destination, 'wb') as f:
-                # FIXME: PYSSL-bug, unimaginably slow with iter_content() and https. So no progress-bar :(
-                # import tqdm
-                # for data in tqdm(r.iter_content(), total=file_.size, unit='B', unit_scale=True):
-                r.raw.decode_content = True
-                shutil.copyfileobj(r.raw, f)
-    """
-
-    async def delete_file(self, file_):
-        ret = await self._make_request('/item/delete', params={'type': file_.type, 'id': file_.id})
+    async def delete(self, item_):
+        if not item_.id:
+            return True
+        ret = await self._make_request('/item/delete', params={'type': item_.type, 'id': item_.id})
         if 'success' in ret:
             return True
-        logging.error('Could not delete file {}: {}'.format(file_, ret))
+        logging.error('Could not delete file {}: {}'.format(item_, ret))
 
     async def _make_request(self, url, data=None, params=None):
         """ Do a request, take care of the cookies, timeouts and exceptions """
@@ -198,19 +235,18 @@ class PremiumizeMeDownloader:
 
     async def upload(self, torrent):
         ret = await self._make_request("/transfer/create", params={'type': 'torrent', 'src': torrent})
-        ret_j = json.loads(ret)
-        if 'success' not in ret_j:
-            logging.error('Could not add torrent {}: {}'.format(torrent, ret))
-
-        return ret_j
+        return Upload(torrent, json.loads(ret))
 
     async def upload_files(self, torrents):
         download_ids = [asyncio.ensure_future(self.upload(torrent)) for torrent in torrents]
         responses = await asyncio.gather(*download_ids)
 
         logging.info('Ids of uploaded files:')
-        logging.info('\n'.join(['  {}:\t{}'.format(*t) for t in zip(map(str, torrents), responses)]))
+        logging.info('\n'.join(map(str, responses)))
         return responses
+
+    def __bool__(self):
+        return bool(self.username and self.password)
 
 
 if __name__ == '__main__':
@@ -249,6 +285,9 @@ if __name__ == '__main__':
     event_loop = asyncio.get_event_loop()
     dl = PremiumizeMeDownloader(args.download_directory, args.auth, event_loop,
                                 delete_after_download_days=args.delete_after_download_days)
+    if not dl:
+        sys.exit(1)
+
     try:
         if args.upload:
             event_loop.run_until_complete(dl.upload_files(args.files))
