@@ -9,9 +9,11 @@ python3 premiumize_me_download.py files [files, ...] dir [-a auth] [-d]
    - A string in the format "user:pass"
    - A file containing "user:pass"
  - -d: Set to delete successfully downloaded files from premiumize.me
+ - -u: Instead of download, upload files to premiumize.me
  
  ## Dependencies
  - python 3.5+ (asyncio)
+ - python3-aiofiles
  - python3-aiohttp
  - python3-aiodns
  - A valid premiumize.me account with Premium ;)
