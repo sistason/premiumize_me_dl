@@ -19,8 +19,8 @@ class File(HasSize):
         ts = int(ts_) if type(ts_) is str and ts_.isdigit() else 0
         self.created_at = datetime.datetime.fromtimestamp(ts)
 
-    def matches(self, regexes, hashes):
-        return bool([r.search(self.name) for r in regexes if self.name]) or self.hash in hashes
+    def matches(self, regex, hashes):
+        return bool(regex.search(self.name)) or self.hash in hashes
 
     def __str__(self):
         return '{s.id}: {s.name} ({s.size_in_mb}MB) {s.hash}'.format(s=self)

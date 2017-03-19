@@ -5,7 +5,7 @@ import logging
 import sys
 import re
 
-from premiumize_me_api import PremiumizeMeAPI
+from premiumize_me_dl.premiumize_me_api import PremiumizeMeAPI
 
 
 class PremiumizeMeDownloader:
@@ -23,18 +23,18 @@ class PremiumizeMeDownloader:
     @staticmethod
     def _parse_filters(filters):
         hashes = [f for f in filters if re.match(r'[0-9a-fA-F]{40}$', f)]
-        regexes = []
+        regex = []
         if filters != hashes:
-            regexes = re.compile('|'.join(r for r in filters if r not in hashes), re.IGNORECASE)
+            regex = re.compile('|'.join(r for r in filters if r not in hashes), re.IGNORECASE)
 
-        return regexes, hashes
+        return regex, hashes
 
     async def download_files(self, filters):
         now = datetime.datetime.now()
-        regexes, hashes = self._parse_filters(filters)
+        regex, hashes = self._parse_filters(filters)
         file_list = await self.api.get_files()
         for file_ in file_list:
-            if file_.matches(regexes, hashes):
+            if file_.matches(regex, hashes):
                 success = await self.api.download_file(file_, self.download_directory)
                 if success and self.delete_after and file_.created_at+self.delete_after < now:
                     await self.api.delete(file_)

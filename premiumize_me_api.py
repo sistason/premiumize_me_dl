@@ -8,7 +8,7 @@ import asyncio
 import zipfile
 import concurrent.futures
 
-from premiumize_me_objects import Transfer, Torrent, Upload, File
+from premiumize_me_dl.premiumize_me_objects import Transfer, Torrent, Upload, File
 
 
 class PremiumizeMeAPI:
@@ -51,7 +51,7 @@ class PremiumizeMeAPI:
 
                     transfer_time = time.time() - start_time
                     logging.info('Download finished, took {}s, at {:.4}MByte/s'.format(
-                        int(transfer_time), torrent.size_in_mb / transfer_time))
+                        int(transfer_time), file_.size_in_mb / transfer_time))
                     return True
                 else:
                     logging.error('Download of "{}" failed, returned "{}"!'.format(torrent.name, response.status))
