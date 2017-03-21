@@ -23,7 +23,8 @@ class PremiumizeMeAPI:
         self.aiohttp_session = None
 
     def close(self):
-        self.aiohttp_session.close()
+        if self.aiohttp_session is not None:
+            self.aiohttp_session.close()
 
     async def download_file(self, file_, download_directory):
         if self._file_exists(file_, download_directory):
