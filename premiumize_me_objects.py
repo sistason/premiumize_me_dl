@@ -40,7 +40,9 @@ class Transfer(HasSize):
     def __init__(self, properties):
         super().__init__(properties.get('size', 0))
 
-        self.name = properties.get('name', '')
+        self.name = properties.get('name', None)
+        if self.name is None:
+            self.name = '<not yet set>'
         self.id = properties.get('id', '')
         self.hash = properties.get('hash', '')
 

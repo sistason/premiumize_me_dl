@@ -11,7 +11,7 @@ from premiumize_me_dl.premiumize_me_api import PremiumizeMeAPI
 class PremiumizeMeDownloader:
     url = 'https://www.premiumize.me/api'
 
-    def __init__(self, download_directory, auth, event_loop, delete_after_download_days=0):
+    def __init__(self, download_directory, auth, event_loop, delete_after_download_days=-1):
         self.api = PremiumizeMeAPI(auth, event_loop)
 
         self.delete_after = datetime.timedelta(days=delete_after_download_days)
@@ -36,7 +36,7 @@ class PremiumizeMeDownloader:
         for file_ in file_list:
             if file_.matches(regex, hashes):
                 success = await self.api.download_file(file_, self.download_directory)
-                if success and self.delete_after and file_.created_at+self.delete_after < now:
+                if success and self.delete_after.days > 0 and file_.created_at+self.delete_after < now:
                     await self.api.delete(file_)
 
     async def upload_files(self, torrents):
@@ -71,7 +71,7 @@ if __name__ == '__main__':
                            help='Set the directory to download the file(s) into.')
     argparser.add_argument('-a', '--auth', type=str, required=True,
                            help="Either 'user:password' or a path to a pw-file with that format")
-    argparser.add_argument('-d', '--delete_after_download_days', type=int, default=0,
+    argparser.add_argument('-d', '--delete_after_download_days', type=int, default=-1,
                            help="Delete files from My Files after successful download")
     argparser.add_argument('-u', '--upload', action='store_true',
                            help="Don't download files, but upload the given files")

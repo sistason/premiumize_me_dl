@@ -18,6 +18,7 @@ class PremiumizeMeAPI:
         self.username, self.password = self._read_auth(auth)
         self.login_data = {'customer_id': self.username, 'pin': self.password}
 
+        self.file_list_cached = None
         self.event_loop = event_loop
         self.max_simultaneous_downloads = asyncio.Semaphore(2)
         self.aiohttp_session = None
@@ -66,6 +67,7 @@ class PremiumizeMeAPI:
         response_text = await self._make_request("/transfer/create", params={'type': 'torrent', 'src': src})
         success, response_json = self._validate_to_json(response_text)
         if success:
+            self.file_list_cached = None
             return Upload(response_json)
         logging.error('Could not upload torrent {}: {}'.format(torrent, response_json.get('message')))
         return None
@@ -76,9 +78,19 @@ class PremiumizeMeAPI:
         response_text = await self._make_request('/item/delete', params={'type': file_.type, 'id': file_.id})
         success, response_json = self._validate_to_json(response_text)
         if success:
+            self.file_list_cached = None
             return True
         logging.error('Could not delete file {}: {}'.format(file_, response_json.get('message')))
         return False
+
+    async def get_file_from_transfer(self, transfer_):
+        if not self.file_list_cached:
+            await self.get_files()
+        for file_ in self.file_list_cached:
+            if file_.hash == transfer_.hash:
+                return file_
+
+        logging.error('No file for transfer "{}" found'.format(transfer_.name))
 
     async def get_torrent_from_file(self, file_):
         response_text = await self._make_request('/torrent/browse', params={'hash': file_.hash})
@@ -87,13 +99,15 @@ class PremiumizeMeAPI:
             return Torrent(response_json)
 
         logging.error('Could not download file "{}": {}'.format(file_.name, response_json.get('message', '?')))
-        return None
 
     async def get_files(self):
+        if self.file_list_cached is not None:
+            return self.file_list_cached
         response_text = await self._make_request('/folder/list')
         success, response_json = self._validate_to_json(response_text)
         if success:
-            return [File(properties_) for properties_ in response_json.get('content', []) if properties_]
+            self.file_list_cached = [File(properties_) for properties_ in response_json.get('content', []) if properties_]
+            return self.file_list_cached
         logging.error('Error while getting files. Was: {}'.format(response_json.get('message')))
         return []
 
@@ -151,7 +165,7 @@ class PremiumizeMeAPI:
         if os.path.exists(path_):
             try:
                 if file_.size and file_.size * 0.999 < self._get_size(path_) < file_.size * 1.001:
-                    logging.info('Skipped "{}",get already exists'.format(file_.name))
+                    logging.info('Skipped "{}", already exists'.format(file_.name))
                     return True
             except OSError as e:
                 logging.warning('Could not get size of file "{}": {}'.format(file_.name, e))
