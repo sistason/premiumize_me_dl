@@ -11,10 +11,11 @@ from premiumize_me_dl.premiumize_me_api import PremiumizeMeAPI
 class PremiumizeMeDownloader:
     url = 'https://www.premiumize.me/api'
 
-    def __init__(self, download_directory, auth, event_loop, delete_after_download_days=-1):
+    def __init__(self, download_directory, auth, event_loop, delete_after_download_days=-1, cleanup=False):
         self.api = PremiumizeMeAPI(auth, event_loop)
 
         self.delete_after = datetime.timedelta(days=delete_after_download_days)
+        self.cleanup = cleanup
         self.download_directory = download_directory
 
     def close(self):
@@ -35,8 +36,12 @@ class PremiumizeMeDownloader:
         file_list = await self.api.get_files()
         for file_ in file_list:
             if file_.matches(regex, hashes):
-                success = await self.api.download_file(file_, self.download_directory)
-                if success and self.delete_after.days > 0 and file_.created_at+self.delete_after < now:
+                if self.cleanup:
+                    success = True
+                else:
+                    success = await self.api.download_file(file_, self.download_directory)
+
+                if success and self.delete_after.days > -1 and file_.created_at+self.delete_after < now:
                     await self.api.delete(file_)
 
     async def upload_files(self, torrents):
@@ -75,6 +80,8 @@ if __name__ == '__main__':
                            help="Delete files from My Files after successful download")
     argparser.add_argument('-u', '--upload', action='store_true',
                            help="Don't download files, but upload the given files")
+    argparser.add_argument('-c', '--cleanup', action='store_true',
+                           help="Don't download files, just cleanup. Use with -d")
 
     args = argparser.parse_args()
 
@@ -83,7 +90,8 @@ if __name__ == '__main__':
 
     event_loop_ = asyncio.get_event_loop()
     dl = PremiumizeMeDownloader(args.download_directory, args.auth, event_loop_,
-                                delete_after_download_days=args.delete_after_download_days)
+                                delete_after_download_days=args.delete_after_download_days,
+                                cleanup=args.cleanup)
     if not dl:
         sys.exit(1)
 
