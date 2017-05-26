@@ -6,6 +6,7 @@ import aiofiles
 import aiohttp
 import asyncio
 import zipfile
+import subprocess
 import concurrent.futures
 
 from premiumize_me_dl.premiumize_me_objects import Transfer, Torrent, Upload, File
@@ -13,6 +14,7 @@ from premiumize_me_dl.premiumize_me_objects import Transfer, Torrent, Upload, Fi
 
 class PremiumizeMeAPI:
     url = 'https://www.premiumize.me/api'
+    USE_NATIVE_DOWNLOADER = False
 
     def __init__(self, auth, event_loop):
         self.username, self.password = self._read_auth(auth)
@@ -20,7 +22,10 @@ class PremiumizeMeAPI:
 
         self.file_list_cached = None
         self.event_loop = event_loop
+
         self.max_simultaneous_downloads = asyncio.Semaphore(2)
+        if not self.USE_NATIVE_DOWNLOADER:
+            self.process_pool = concurrent.futures.ThreadPoolExecutor(4)
         self.aiohttp_session = None
 
     def close(self):
@@ -33,31 +38,51 @@ class PremiumizeMeAPI:
 
         torrent = await self.get_torrent_from_file(file_)
 
-        logging.info('Downloading {} ({} MB)...'.format(file_.name, file_.size_in_mb))
         async with self.max_simultaneous_downloads:
-            start_time = time.time()
-            async with self.aiohttp_session.get(torrent.zip, data=self.login_data) as response:
-                file_destination = os.path.join(download_directory, torrent.name + '.zip')
-                if response.status == 200:
-                    async with aiofiles.open(file_destination, 'wb') as f:
-                        while True:
-                            try:
-                                chunk = await response.content.read(8192)
-                            except concurrent.futures.TimeoutError:
-                                pass
-                            if not chunk:
-                                break
-                            await f.write(chunk)
+            logging.info('Downloading {} ({} MB)...'.format(file_.name, file_.size_in_mb))
 
-                    self._unzip(file_destination)
+            file_destination = os.path.join(download_directory, torrent.name + '.zip')
+            if self.USE_NATIVE_DOWNLOADER:
+                return await self.download_file_native(file_, torrent, file_destination)
+            else:
+                return await self.download_file_wget(torrent, file_destination)
 
-                    transfer_time = time.time() - start_time
-                    logging.info('Download finished, took {}s, at {:.4}MByte/s'.format(
-                        int(transfer_time), file_.size_in_mb / transfer_time))
-                    return True
-                else:
-                    logging.error('Download of "{}" failed, returned "{}"!'.format(torrent.name, response.status))
-                    return False
+    async def download_file_wget(self, torrent, file_destination):
+        proc = await self.event_loop.run_in_executor(self.process_pool,
+                                                     self._download_file_wget_process, torrent, file_destination)
+        return await proc.result()
+
+    def _download_file_wget_process(self, torrent, file_destination):
+        proc = subprocess.run(['wget', torrent.zip, '-qO', file_destination, '--show-progress'])
+        if proc == 0:
+            self._unzip(file_destination)
+            return True
+        else:
+            return False
+
+    async def download_file_native(self, file_, torrent, file_destination):
+        start_time = time.time()
+        async with self.aiohttp_session.get(torrent.zip, data=self.login_data) as response:
+            if response.status == 200:
+                async with aiofiles.open(file_destination, 'wb') as f:
+                    while True:
+                        try:
+                            chunk = await response.content.read(8192)
+                        except concurrent.futures.TimeoutError:
+                            pass
+                        if not chunk:
+                            break
+                        await f.write(chunk)
+
+                self._unzip(file_destination)
+
+                transfer_time = time.time() - start_time
+                logging.info('Download finished, took {}s, at {:.4}MByte/s'.format(
+                    int(transfer_time), file_.size_in_mb / transfer_time))
+                return True
+            else:
+                logging.error('Download of "{}" failed, returned "{}"!'.format(torrent.name, response.status))
+                return False
 
     async def upload(self, torrent):
         src = None

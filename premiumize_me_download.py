@@ -31,18 +31,36 @@ class PremiumizeMeDownloader:
         return regex, hashes
 
     async def download_files(self, filters):
-        now = datetime.datetime.now()
         regex, hashes = self._parse_filters(filters)
         file_list = await self.api.get_files()
-        for file_ in file_list:
-            if file_.matches(regex, hashes):
-                if self.cleanup:
-                    success = True
-                else:
-                    success = await self.api.download_file(file_, self.download_directory)
+        file_list = await self._filter_file_list(file_list)
+        tasks = asyncio.gather(*[self._download_file(file_) for file_ in file_list if file_.matches(regex, hashes)])
+        await tasks
 
-                if success and self.delete_after.days > -1 and file_.created_at+self.delete_after < now:
-                    await self.api.delete(file_)
+    async def _filter_file_list(self, file_list):
+        hashes_list = []
+        filtered_list = []
+        for file_ in file_list:
+            if file_.hash in hashes_list:
+                await self._delete_file(file_)
+                continue
+            hashes_list.append(file_.hash)
+            filtered_list.append(file_)
+        return filtered_list
+
+    async def _download_file(self, file_):
+        if self.cleanup:
+            success = True
+        else:
+            success = await self.api.download_file(file_, self.download_directory)
+
+        if success:
+            self._delete_file(file_)
+
+    async def _delete_file(self, file_):
+        now = datetime.datetime.now()
+        if self.delete_after.days > -1 and file_.created_at + self.delete_after < now:
+            await self.api.delete(file_)
 
     async def upload_files(self, torrents):
         download_ids = [asyncio.ensure_future(self.api.upload(torrent)) for torrent in torrents]
