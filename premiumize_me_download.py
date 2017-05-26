@@ -55,7 +55,7 @@ class PremiumizeMeDownloader:
             success = await self.api.download_file(file_, self.download_directory)
 
         if success:
-            self._delete_file(file_)
+            await self._delete_file(file_)
 
     async def _delete_file(self, file_):
         now = datetime.datetime.now()

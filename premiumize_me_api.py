@@ -48,13 +48,12 @@ class PremiumizeMeAPI:
                 return await self.download_file_wget(torrent, file_destination)
 
     async def download_file_wget(self, torrent, file_destination):
-        proc = await self.event_loop.run_in_executor(self.process_pool,
+        return await self.event_loop.run_in_executor(self.process_pool,
                                                      self._download_file_wget_process, torrent, file_destination)
-        return await proc.result()
 
     def _download_file_wget_process(self, torrent, file_destination):
         proc = subprocess.run(['wget', torrent.zip, '-qO', file_destination, '--show-progress'])
-        if proc == 0:
+        if proc.returncode == 0:
             self._unzip(file_destination)
             return True
         else:
