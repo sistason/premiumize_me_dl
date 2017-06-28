@@ -17,8 +17,7 @@ class PremiumizeMeAPI:
     USE_NATIVE_DOWNLOADER = False
 
     def __init__(self, auth, event_loop):
-        self.username, self.password = self._read_auth(auth)
-        self.login_data = {'customer_id': self.username, 'pin': self.password}
+        self.login_data = self._read_auth(auth)
 
         self.file_list_cached = None
         self.event_loop = event_loop
@@ -202,16 +201,25 @@ class PremiumizeMeAPI:
 
     @staticmethod
     def _read_auth(auth):
-        if auth and os.path.exists(auth):
+        if not auth:
+            auth = 'auth.txt'
+
+        if ':' in auth:
+            username, password = auth.strip().split(':')
+        elif os.path.exists(auth):
             with open(auth, 'r') as f:
-                auth = f.read()
+                username, password = f.read().strip().split(':')
+        else:
+            with open(auth, 'w') as f:
+                username = input('Please enter your premiumize.me-username: ')
+                password = input('Please enter your premiumize.me-password: ')
+                f.write(':'.join([username, password]))
 
-        if not (auth and ':' in auth):
-            logging.error('No ":" found in authentication information, login not possible!')
-            return None, None
+        if not (username and password):
+            logging.error('Authentication file not found or credentials were malformed!')
+            return {}
 
-        username, password = auth.strip().split(':')
-        return username, password
+        return {'customer_id': username, 'pin': password}
 
     def __bool__(self):
-        return bool(self.username and self.password)
+        return bool(self.login_data.get('customer_id') and self.login_data.get('pin'))
