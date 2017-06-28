@@ -62,13 +62,8 @@ class PremiumizeMeDownloader:
         if self.delete_after.days > -1 and file_.created_at + self.delete_after < now:
             await self.api.delete(file_)
 
-    async def upload_files(self, torrents):
-        download_ids = [asyncio.ensure_future(self.api.upload(torrent)) for torrent in torrents]
-        responses = await asyncio.gather(*download_ids)
-
-        logging.info('Ids of uploaded files:')
-        logging.info('\n'.join(map(str, responses)))
-        return responses
+    def __bool__(self):
+        return bool(self.api)
 
 
 if __name__ == '__main__':
@@ -96,8 +91,6 @@ if __name__ == '__main__':
                            help="Either 'user:password' or a path to a pw-file with that format")
     argparser.add_argument('-d', '--delete_after_download_days', type=int, default=-1,
                            help="Delete files from My Files after successful download")
-    argparser.add_argument('-u', '--upload', action='store_true',
-                           help="Don't download files, but upload the given files")
     argparser.add_argument('-c', '--cleanup', action='store_true',
                            help="Don't download files, just cleanup. Use with -d")
 
@@ -114,10 +107,7 @@ if __name__ == '__main__':
         sys.exit(1)
 
     try:
-        if args.upload:
-            event_loop_.run_until_complete(dl.upload_files(args.files))
-        else:
-            event_loop_.run_until_complete(dl.download_files(args.files))
+        event_loop_.run_until_complete(dl.download_files(args.files))
     except KeyboardInterrupt:
         pass
     finally:
