@@ -6,6 +6,7 @@ import aiofiles
 import aiohttp
 import asyncio
 import zipfile
+import getpass
 import subprocess
 import concurrent.futures
 
@@ -212,7 +213,7 @@ class PremiumizeMeAPI:
         else:
             with open(auth, 'w') as f:
                 username = input('Please enter your premiumize.me-username: ')
-                password = input('Please enter your premiumize.me-password: ')
+                password = getpass.getpass(prompt='Please enter your premiumize.me-password: ')
                 f.write(':'.join([username, password]))
 
         if not (username and password):
