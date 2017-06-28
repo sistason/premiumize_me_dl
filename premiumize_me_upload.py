@@ -33,7 +33,7 @@ if __name__ == '__main__':
     argparser = argparse.ArgumentParser(description="Upload links to your premiumize.me")
     argparser.add_argument('files', nargs='+', type=str,
                            help='Let premiumize.me download these links to your cloud')
-    argparser.add_argument('-a', '--auth', type=str, required=True,
+    argparser.add_argument('-a', '--auth', type=str,
                            help="Either 'user:password' or a path to a pw-file with that format")
 
     args = argparser.parse_args()

@@ -87,7 +87,7 @@ if __name__ == '__main__':
                            help='Download all files matching these (python) regular expressions.')
     argparser.add_argument('download_directory', type=argcheck_dir, default='.',
                            help='Set the directory to download the file(s) into.')
-    argparser.add_argument('-a', '--auth', type=str, required=True,
+    argparser.add_argument('-a', '--auth', type=str,
                            help="Either 'user:password' or a path to a pw-file with that format")
     argparser.add_argument('-d', '--delete_after_download_days', type=int, default=-1,
                            help="Delete files from My Files after successful download")
