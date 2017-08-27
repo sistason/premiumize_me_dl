@@ -17,16 +17,16 @@ class PremiumizeMeAPI:
     url = 'https://www.premiumize.me/api'
     USE_NATIVE_DOWNLOADER = False
 
-    def __init__(self, auth, event_loop):
+    def __init__(self, auth, event_loop=None):
+        self.event_loop = asyncio.get_event_loop() if event_loop is None else event_loop
         self.login_data = self._read_auth(auth)
 
         self.file_list_cached = None
-        self.event_loop = event_loop
+        self.aiohttp_session = None
 
         self.max_simultaneous_downloads = asyncio.Semaphore(2)
         if not self.USE_NATIVE_DOWNLOADER:
             self.process_pool = concurrent.futures.ThreadPoolExecutor(4)
-        self.aiohttp_session = None
 
     def close(self):
         if self.aiohttp_session is not None:
@@ -87,6 +87,8 @@ class PremiumizeMeAPI:
         src = None
         if type(torrent) is str:
             src = torrent
+        elif str(torrent.__class__).rsplit('.', 1)[-1].startswith('PirateBayResult'):
+            src = torrent.magnet
 
         response_text = await self._make_request("/transfer/create", params={'type': 'torrent', 'src': src})
         success, response_json = self._validate_to_json(response_text)

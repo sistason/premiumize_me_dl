@@ -11,8 +11,9 @@ from premiumize_me_dl.premiumize_me_api import PremiumizeMeAPI
 class PremiumizeMeDownloader:
     url = 'https://www.premiumize.me/api'
 
-    def __init__(self, download_directory, auth, event_loop, delete_after_download_days=-1, cleanup=False):
-        self.api = PremiumizeMeAPI(auth, event_loop)
+    def __init__(self, download_directory, auth, event_loop=None, delete_after_download_days=-1, cleanup=False):
+        self.event_loop = asyncio.get_event_loop() if event_loop is None else event_loop
+        self.api = PremiumizeMeAPI(auth, event_loop=self.event_loop)
 
         self.delete_after = datetime.timedelta(days=delete_after_download_days)
         self.cleanup = cleanup
