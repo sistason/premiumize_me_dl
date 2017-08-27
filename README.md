@@ -3,6 +3,7 @@ Download/Upload your premiumize.me torrents via cli
 
 ## Usage
 Download files from your Premiumize.me account
+
 `python3 premiumize_me_download.py file [file, ...] /your/download/path [-a auth] [-d days] [-c]`
  - file: Regular expressions for which files to get
  - -a: Supply authentication information. These can be either:
@@ -14,6 +15,7 @@ Download files from your Premiumize.me account
 
 
 Upload links for Premiumize.me to download
+
 `python3 premiumize_me_upload.py link [link, ...] [-a auth]`
  - link: Anything the premiumize.me downloader likes (pirate-bay-url, magnet, ...)
  - -a: Supply authentication information. These can be either:
