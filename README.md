@@ -3,7 +3,8 @@ Download/Upload your premiumize.me torrents via cli
 
 ## Usage
 Download files from your Premiumize.me account
-python3 premiumize_me_download.py file [file, ...] /your/download/path [-a auth] [-d days] [-c]
+
+`python3 premiumize_me_download.py file [file, ...] /your/download/path [-a auth] [-d days] [-c]`
  - file: Regular expressions for which files to get
  - -a: Supply authentication information. These can be either:
    - A string in the format "user:pass"
@@ -12,8 +13,12 @@ python3 premiumize_me_download.py file [file, ...] /your/download/path [-a auth]
  - -d, --delete: Delete downloaded $files, if they are older than $day days.
  - -c, --cleanup: Ignore $files, just delete all files older than $days.
 
+
+
+
 Upload links for Premiumize.me to download
-python3 premiumize_me_upload.py link [link, ...] [-a auth]
+
+`python3 premiumize_me_upload.py link [link, ...] [-a auth]`
  - link: Anything the premiumize.me downloader likes (pirate-bay-url, magnet, ...)
  - -a: Supply authentication information. These can be either:
    - A string in the format "user:pass"
