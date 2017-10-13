@@ -53,4 +53,3 @@ if __name__ == '__main__':
         pass
     finally:
         dl.close()
-        event_loop_.close()

@@ -59,7 +59,8 @@ class Transfer(HasSize):
         self.eta = properties.get('eta')
 
     def is_running(self):
-        return self.status == 'waiting' and not self.status_msg().startswith('Torrent did not finish for ')
+        return self.status == 'queued' or \
+               self.status == 'waiting' and not self.status_msg().startswith('Torrent did not finish for ')
 
     def status_msg(self):
         return self.status if self.status != 'waiting' else self.message
