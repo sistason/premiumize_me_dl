@@ -2,7 +2,6 @@ import os
 import json
 import time
 import logging
-import aiofiles
 import aiohttp
 import asyncio
 import zipfile
@@ -10,12 +9,14 @@ import getpass
 import subprocess
 import concurrent.futures
 
-from premiumize_me_dl.premiumize_me_objects import Transfer, Torrent, Upload, File
+from premiumize_me_dl.premiumize_me_objects import Transfer, Download, Upload, File, Folder
+
+# Premiumize.me API Version
+__version__ = 3
 
 
 class PremiumizeMeAPI:
     url = 'https://www.premiumize.me/api'
-    USE_NATIVE_DOWNLOADER = False
 
     def __init__(self, auth, event_loop=None):
         self.event_loop = asyncio.get_event_loop() if event_loop is None else event_loop
@@ -25,65 +26,50 @@ class PremiumizeMeAPI:
         self.aiohttp_session = None
 
         self.max_simultaneous_downloads = asyncio.Semaphore(2)
-        if not self.USE_NATIVE_DOWNLOADER:
-            self.process_pool = concurrent.futures.ThreadPoolExecutor(4)
+        self.process_pool = concurrent.futures.ThreadPoolExecutor(4)
 
     def close(self):
         if self.aiohttp_session is not None:
             self.aiohttp_session.close()
 
+    async def wait_for_torrent(self, upload_):
+        #TODO: Test after API-Change
+        logging.info('Waiting for premiumize.me to finish downloading the torrent...')
+        transfer = None
+        while transfer is None or transfer.is_running() and transfer.status != 'error':
+            await asyncio.sleep(2)
+
+            for transfer_ in await self.get_transfers():
+                if transfer_.id == upload_.id:
+                    transfer = transfer_
+            logging.info('  Status: {}'.format(transfer.status_msg()))
+        return transfer
+
     async def download_file(self, file_, download_directory):
         if self._file_exists(file_, download_directory):
             return True
 
-        torrent = await self.get_torrent_from_file(file_)
+        download = await self.get_file_download(file_)
+        if not download:
+            return 
 
         async with self.max_simultaneous_downloads:
-            logging.info('Downloading {} ({} MB)...'.format(file_.name, file_.size_in_mb))
+            logging.info('Downloading {} ({} MB)...'.format(file_.name, download.size_in_mb))
 
-            file_destination = os.path.join(download_directory, torrent.name + '.zip')
-            if self.USE_NATIVE_DOWNLOADER:
-                return await self.download_file_native(file_, torrent, file_destination)
-            else:
-                return await self.download_file_wget(torrent, file_destination)
+            file_destination = os.path.join(download_directory, download.name + '.zip')
+            return await self.event_loop.run_in_executor(self.process_pool,
+                                                         self._download_file_wget_process, download, file_destination)
 
-    async def download_file_wget(self, torrent, file_destination):
-        return await self.event_loop.run_in_executor(self.process_pool,
-                                                     self._download_file_wget_process, torrent, file_destination)
-
-    def _download_file_wget_process(self, torrent, file_destination):
-        proc = subprocess.run(['wget', torrent.zip, '-qO', file_destination, '--show-progress'])
+    def _download_file_wget_process(self, download, file_destination):
+        proc = subprocess.run(['wget', download.link, '-qO', file_destination, '--show-progress'])
         if proc.returncode == 0:
             self._unzip(file_destination)
             return True
         else:
             return False
 
-    async def download_file_native(self, file_, torrent, file_destination):
-        start_time = time.time()
-        async with self.aiohttp_session.get(torrent.zip, data=self.login_data) as response:
-            if response.status == 200:
-                async with aiofiles.open(file_destination, 'wb') as f:
-                    while True:
-                        try:
-                            chunk = await response.content.read(8192)
-                        except concurrent.futures.TimeoutError:
-                            pass
-                        if not chunk:
-                            break
-                        await f.write(chunk)
-
-                self._unzip(file_destination)
-
-                transfer_time = time.time() - start_time
-                logging.info('Download finished, took {}s, at {:.4}MByte/s'.format(
-                    int(transfer_time), file_.size_in_mb / transfer_time))
-                return True
-            else:
-                logging.error('Download of "{}" failed, returned "{}"!'.format(torrent.name, response.status))
-                return False
-
     async def upload(self, torrent):
+        #TODO: Test after API-Change
         src = None
         if type(torrent) is str:
             src = torrent
@@ -101,7 +87,10 @@ class PremiumizeMeAPI:
     async def delete(self, file_):
         if not file_ or not file_.id:
             return True
-        response_text = await self._make_request('/item/delete', params={'type': file_.type, 'id': file_.id})
+        if type(file_) is File:
+            response_text = await self._make_request('/item/delete', data={'id': file_.id})
+        else:
+            response_text = await self._make_request('/folder/delete', data={'id': file_.id})
         success, response_json = self._validate_to_json(response_text)
         if success:
             self.file_list_cached = None
@@ -110,6 +99,7 @@ class PremiumizeMeAPI:
         return False
 
     async def get_file_from_transfer(self, transfer_):
+        #TODO: Test after API-Change
         if not self.file_list_cached:
             await self.get_files()
         for file_ in self.file_list_cached:
@@ -118,11 +108,17 @@ class PremiumizeMeAPI:
 
         logging.error('No file for transfer "{}" found'.format(transfer_.name))
 
-    async def get_torrent_from_file(self, file_):
-        response_text = await self._make_request('/torrent/browse', params={'hash': file_.hash})
+    async def get_file_download(self, file_):
+        #TODO: Test after API-Change
+        if type(file_) is File:
+            return None # file_
+        # TODO: how to generate a zip from folder
+        # TODO: how to handle Torrents? Test with long-running torrent (low seeders)
+        response_text = await self._make_request('/zip/generate', data={'items': {'folders': [file_.id]}})
         success, response_json = self._validate_to_json(response_text)
+        print(response_json)
         if success:
-            return Torrent(response_json)
+            return File(response_json)
 
         logging.error('Could not download file "{}": {}'.format(file_.name, response_json.get('message', '?')))
 
@@ -132,12 +128,20 @@ class PremiumizeMeAPI:
         response_text = await self._make_request('/folder/list')
         success, response_json = self._validate_to_json(response_text)
         if success:
-            self.file_list_cached = [File(properties_) for properties_ in response_json.get('content', []) if properties_]
+            self.file_list_cached = []
+            for properties_ in response_json.get('content', []):
+                if not properties_:
+                    continue
+                if properties_.get('type', '') == 'file':
+                    self.file_list_cached.append(File(properties_))
+                if properties_.get('type', '') == 'folder':
+                    self.file_list_cached.append(Folder(properties_))
             return self.file_list_cached
         logging.error('Error while getting files. Was: {}'.format(response_json.get('message')))
         return []
 
     async def get_transfers(self):
+        #TODO: Test after API-Change
         response_text = await self._make_request('/transfer/list')
         success, response_json = self._validate_to_json(response_text)
         if success:
@@ -145,28 +149,26 @@ class PremiumizeMeAPI:
         logging.error('Error while getting transfers. Was: {}'.format(response_json.get('message')))
         return []
 
-    async def _make_request(self, url, data=None, params=None):
+    async def _make_request(self, url, data=None):
         """ Do a request, take care of the login, timeouts and exceptions """
         data_ = self.login_data
         if data is not None:
             data_.update(data)
-        if params is None:
-            params = {}
         if self.aiohttp_session is None:
             self.aiohttp_session = aiohttp.ClientSession(loop=self.event_loop)
 
         retries = 3
         for _ in range(retries):
             try:
-                async with self.aiohttp_session.post(self.url + url, data=data_,
-                                                     params=params, timeout=10) as r_:
+                async with self.aiohttp_session.post(self.url + url, data=data_, timeout=10) as r_:
                     text = await r_.text()
                     if r_.status == 200:
                         return text
-            except (aiohttp.errors.TimeoutError, aiohttp.errors.ClientConnectionError):
+            except (asyncio.TimeoutError, aiohttp.ClientConnectionError):
+                logging.warning('Timeout, retrying...')
                 await asyncio.sleep(1)
             except Exception as e:
-                logging.debug('Caught Exception "{}" while making a get-request to "{}"'.format(e.__class__, url))
+                logging.error('Caught Exception "{}" while making a get-request to "{}"'.format(e.__class__, url))
                 return json.dumps({'error': 'true', 'message': str(e)})
         return json.dumps({'error': 'true', 'message': 'timeout'})
 

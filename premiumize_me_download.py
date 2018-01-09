@@ -22,32 +22,11 @@ class PremiumizeMeDownloader:
     def close(self):
         self.api.close()
 
-    @staticmethod
-    def _parse_filters(filters):
-        hashes = [f for f in filters if re.match(r'[0-9a-fA-F]{40}$', f)]
-        regex = []
-        if filters != hashes:
-            regex = re.compile('|'.join(r for r in filters if r not in hashes), re.IGNORECASE)
-
-        return regex, hashes
-
-    async def download_files(self, filters):
-        regex, hashes = self._parse_filters(filters)
+    async def download_files(self, filter_regex):
+        regex = re.compile(filter_regex, re.IGNORECASE)
         file_list = await self.api.get_files()
-        file_list = await self._filter_file_list(file_list)
-        tasks = asyncio.gather(*[self._download_file(file_) for file_ in file_list if file_.matches(regex, hashes)])
+        tasks = asyncio.gather(*[self._download_file(file_) for file_ in file_list if file_.matches(regex)])
         await tasks
-
-    async def _filter_file_list(self, file_list):
-        hashes_list = []
-        filtered_list = []
-        for file_ in file_list:
-            if file_.hash in hashes_list:
-                await self._delete_file(file_)
-                continue
-            hashes_list.append(file_.hash)
-            filtered_list.append(file_)
-        return filtered_list
 
     async def _download_file(self, file_):
         if self.cleanup:
@@ -84,9 +63,9 @@ if __name__ == '__main__':
             raise argparse.ArgumentTypeError('{} is no valid regular expression!'.format(string))
 
     argparser = argparse.ArgumentParser(description="Download your files at premiumize.me")
-    argparser.add_argument('files', nargs='+', type=argcheck_re,
-                           help='Download all files matching these (python) regular expressions.')
-    argparser.add_argument('download_directory', type=argcheck_dir, default='.',
+    argparser.add_argument('file_regex', type=argcheck_re,
+                           help='Download all files matching this (python) regular expression.')
+    argparser.add_argument('download_directory', type=argcheck_dir, default='.', nargs='?',
                            help='Set the directory to download the file(s) into.')
     argparser.add_argument('-a', '--auth', type=str,
                            help="Either 'user:password' or a path to a pw-file with that format")
@@ -108,7 +87,7 @@ if __name__ == '__main__':
         sys.exit(1)
 
     try:
-        event_loop_.run_until_complete(dl.download_files(args.files))
+        event_loop_.run_until_complete(dl.download_files(args.file_regex))
     except KeyboardInterrupt:
         pass
     finally:
