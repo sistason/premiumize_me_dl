@@ -45,25 +45,29 @@ class PremiumizeMeAPI:
             logging.info('  Status: {}'.format(transfer.status_msg()))
         return transfer
 
-    async def download_file(self, file_, download_directory):
-        if self._file_exists(file_, download_directory):
+    async def download_file(self, item, download_directory):
+        if self._file_exists(item, download_directory):
             return True
 
-        download = await self.get_file_download(file_)
-        if not download:
-            return 
+        files = await self.get_files_to_download(item)
+        if not files:
+            return
 
-        async with self.max_simultaneous_downloads:
-            logging.info('Downloading {} ({} MB)...'.format(file_.name, download.size_in_mb))
+        return_codes = []
+        for file in files:
+            async with self.max_simultaneous_downloads:
+                logging.info('Downloading {} ({} MB)...'.format(file.name, file.size_in_mb))
 
-            file_destination = os.path.join(download_directory, download.name + '.zip')
-            return await self.event_loop.run_in_executor(self.process_pool,
-                                                         self._download_file_wget_process, download, file_destination)
+                file_destination = os.path.join(download_directory, file.name)
+                return_codes.append(await self.event_loop.run_in_executor(self.process_pool,
+                                                             self._download_file_wget_process,
+                                                             file, file_destination))
+        return False not in return_codes
 
-    def _download_file_wget_process(self, download, file_destination):
-        proc = subprocess.run(['wget', download.link, '-qO', file_destination, '--show-progress'])
+    def _download_file_wget_process(self, file, file_destination):
+        proc = subprocess.run(['wget', file.link, '-qO', file_destination, '--show-progress'])
         if proc.returncode == 0:
-            self._unzip(file_destination)
+            #self._unzip(file_destination)
             return True
         else:
             return False
@@ -113,18 +117,25 @@ class PremiumizeMeAPI:
 
         logging.error('No file for transfer "{}" found, status is: "{}"'.format(transfer_.name, transfer_.status_msg()))
 
-    async def get_file_download(self, file_):
+    async def get_files_to_download(self, item):
         #TODO: Test after API-Change
-        if type(file_) is File:
-            return file_
-        # TODO: how to generate a zip from folder
-        # TODO: how to handle Torrents? Test with long-running torrent (low seeders)
-        response_text = await self._make_request('/zip/generate', data={'items': {'folders': [file_.to_data()]}})
+        if type(item) is File:
+            return [item]
+
+        # Currently download every file separately, since zip-generation is broken (in my code) right now
+        response_text = await self._make_request('/folder/list', data={'id': item.id})
         success, response_json = self._validate_to_json(response_text)
         if success:
-            return File(response_json)
+            return [File(file_) for file_ in response_json.get('content', [])]
 
-        logging.error('Could not download file "{}": {}'.format(file_.name, response_json.get('message', '?')))
+        # TODO: how to generate a zip from folder
+        # TODO: how to handle Torrents? Test with long-running torrent (low seeders)
+        # response_text = await self._make_request('/zip/generate', data={'items': {'folders': [file_.to_data()]}})
+        # success, response_json = self._validate_to_json(response_text)
+        # if success:
+        #     return File(response_json)
+
+        logging.error('Could not download "{}": {}'.format(file_.name, response_json.get('message', '?')))
 
     async def update_files(self):
         if self.file_list_cached:
