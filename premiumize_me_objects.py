@@ -1,9 +1,11 @@
 import datetime
 
+
 def _convert_size(size):
-    if type(size) is str and size_.isdigit() or type(size) in [int, float]:
+    if type(size) is str and size.isdigit() or type(size) in [int, float]:
         return int(size)
     return 0
+
 
 def _convert_ts(ts):
     ts_ = int(ts) if type(ts) is str and ts.isdigit() or type(ts) in [int, float] else 0
@@ -12,9 +14,15 @@ def _convert_ts(ts):
 
 class BaseAttributes:
     def __init__(self, properties):
-        self.name = properties.get('name', '<not yet set>')
-        self.id = properties.get('id', '')
-        self.type = properties.get('type', '')
+        if type(properties) is dict:
+            self.name = properties.get('name', '<not yet set>')
+            self.id = properties.get('id', '')
+            self.type = properties.get('type', '')
+            if self.type not in ['file', 'folder']:
+                self.type = 'transfer'
+        else:
+            print('?')
+            print(properties)
 
     def matches(self, regex):
         return bool(regex.search(self.name))
@@ -24,6 +32,9 @@ class BaseAttributes:
 
     def to_data(self):
         return {'id': self.id, 'name': self.name, 'type': self.type}
+
+    def __str__(self):
+        return '{}: {}'.format(self.id, self.name)
 
 
 class Folder(BaseAttributes):
@@ -64,7 +75,9 @@ class Transfer(BaseAttributes):
         self.size = _convert_size(properties.get('size', 0))
         self.size_in_mb = int(self.size/1024/1024)
 
-        self.hash = properties.get('hash', '')
+        self.folder_id = properties.get('folder_id', '')
+        self.file_id = properties.get('file_id', '')
+        self.target_folder_id = properties.get('target_folder_id', '')
 
         self.status = properties.get('status', '')
         self.message = properties.get('message')
@@ -83,7 +96,7 @@ class Transfer(BaseAttributes):
                 not self.status_msg().startswith('Torrent did not finish for '))
 
     def status_msg(self):
-        return self.status if self.status != 'waiting' else self.message
+        return self.status if self.status == 'finished' else "{}: {}".format(self.status, self.message)
 
     def __str__(self):
         return '{}: {}'.format(self.name, self.status_msg())

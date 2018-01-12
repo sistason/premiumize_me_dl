@@ -69,14 +69,13 @@ class PremiumizeMeAPI:
             return False
 
     async def upload(self, torrent):
-        #TODO: Test after API-Change
         src = None
         if type(torrent) is str:
             src = torrent
         elif str(torrent.__class__).rsplit('.', 1)[-1].startswith('PirateBayResult'):
             src = torrent.magnet
 
-        response_text = await self._make_request("/transfer/create", params={'type': 'torrent', 'src': src})
+        response_text = await self._make_request("/transfer/create", data={'src': src})
         success, response_json = self._validate_to_json(response_text)
         if success:
             self.file_list_cached = None
@@ -89,8 +88,13 @@ class PremiumizeMeAPI:
             return True
         if type(file_) is File:
             response_text = await self._make_request('/item/delete', data={'id': file_.id})
-        else:
+        elif type(file_) is Folder:
             response_text = await self._make_request('/folder/delete', data={'id': file_.id})
+        elif type(file_) is Transfer:
+            response_text = await self._make_request('/transfer/delete', data={'id': file_.id})
+        else:
+            logging.error('Unknown type of file to delete: {}'.format(file_))
+            return True
         success, response_json = self._validate_to_json(response_text)
         if success:
             self.file_list_cached = None
@@ -99,55 +103,79 @@ class PremiumizeMeAPI:
         return False
 
     async def get_file_from_transfer(self, transfer_):
-        #TODO: Test after API-Change
         if not self.file_list_cached:
-            await self.get_files()
+            await self.update_files()
+
         for file_ in self.file_list_cached:
-            if file_.hash == transfer_.hash:
+            if (file_.type == 'folder' and file_.id == transfer_.folder_id) or \
+               (file_.type == 'file' and file_.id == transfer_.file_id):
                 return file_
 
-        logging.error('No file for transfer "{}" found'.format(transfer_.name))
+        logging.error('No file for transfer "{}" found, status is: "{}"'.format(transfer_.name, transfer_.status_msg()))
 
     async def get_file_download(self, file_):
         #TODO: Test after API-Change
         if type(file_) is File:
-            return None # file_
+            return file_
         # TODO: how to generate a zip from folder
         # TODO: how to handle Torrents? Test with long-running torrent (low seeders)
-        response_text = await self._make_request('/zip/generate', data={'items': {'folders': [file_.id]}})
+        response_text = await self._make_request('/zip/generate', data={'items': {'folders': [file_.to_data()]}})
         success, response_json = self._validate_to_json(response_text)
-        print(response_json)
         if success:
             return File(response_json)
 
         logging.error('Could not download file "{}": {}'.format(file_.name, response_json.get('message', '?')))
 
-    async def get_files(self):
-        if self.file_list_cached is not None:
-            return self.file_list_cached
+    async def update_files(self):
+        if self.file_list_cached:
+            return
+
+        file_list_cached_ = []
         response_text = await self._make_request('/folder/list')
         success, response_json = self._validate_to_json(response_text)
         if success:
-            self.file_list_cached = []
             for properties_ in response_json.get('content', []):
                 if not properties_:
                     continue
                 if properties_.get('type', '') == 'file':
-                    self.file_list_cached.append(File(properties_))
+                    file_list_cached_.append(File(properties_))
                 if properties_.get('type', '') == 'folder':
-                    self.file_list_cached.append(Folder(properties_))
+                    file_list_cached_.append(Folder(properties_))
+        else:
+            logging.error('Error while updating files. Was: {}'.format(response_json.get('message')))
+
+        self.file_list_cached = file_list_cached_
+
+    async def get_files(self, recursion_max=5):
+        if self.file_list_cached:
             return self.file_list_cached
-        logging.error('Error while getting files. Was: {}'.format(response_json.get('message')))
+        else:
+            await self.update_files()
+            if recursion_max > 0:
+                return await self.get_files(recursion_max=recursion_max-1)
+
         return []
 
     async def get_transfers(self):
-        #TODO: Test after API-Change
         response_text = await self._make_request('/transfer/list')
         success, response_json = self._validate_to_json(response_text)
         if success:
-            return [Transfer(properties_) for properties_ in response_json.get('transfers', []) if properties_]
+            transfers = []
+            for properties_ in response_json.get('transfers', []):
+                transfer_ = Transfer(properties_)
+                if not self._validate_transfer(transfer_):
+                    await self.delete(transfer_)
+                else:
+                    transfers.append(transfer_)
+            return transfers
         logging.error('Error while getting transfers. Was: {}'.format(response_json.get('message')))
         return []
+
+    @staticmethod
+    def _validate_transfer(transfer):
+        if not (transfer.folder_id or transfer.file_id) and transfer.status in ['finished', 'error']:
+            return False
+        return True
 
     async def _make_request(self, url, data=None):
         """ Do a request, take care of the login, timeouts and exceptions """
@@ -182,6 +210,7 @@ class PremiumizeMeAPI:
     @staticmethod
     def _unzip(file_destination):
         try:
+            # TODO: what if file is not zipped?
             z = zipfile.ZipFile(file_destination)
             z.extractall(path=os.path.dirname(file_destination))
             os.remove(file_destination)
