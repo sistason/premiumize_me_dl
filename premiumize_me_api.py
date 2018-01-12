@@ -1,6 +1,5 @@
 import os
 import json
-import time
 import logging
 import aiohttp
 import asyncio
@@ -46,15 +45,20 @@ class PremiumizeMeAPI:
         return transfer
 
     async def download_file(self, item, download_directory):
-        if self._file_exists(item, download_directory):
-            return True
-
         files = await self.get_files_to_download(item)
         if not files:
             return
 
+        if len(files) > 1:
+            download_directory = os.path.join(download_directory, item.name)
+            if not os.path.exists(download_directory):
+                os.mkdir(download_directory)
+
         return_codes = []
         for file in files:
+            if self._file_exists(file, download_directory):
+                continue
+
             async with self.max_simultaneous_downloads:
                 logging.info('Downloading {} ({} MB)...'.format(file.name, file.size_in_mb))
 
