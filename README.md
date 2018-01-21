@@ -5,7 +5,7 @@ Download/Upload your premiumize.me torrents via cli
 ### Download files from your account
 
 `python3 premiumize_me_download.py file_regex []/your/download/path] [-a auth] [-d days] [-c]`
- - file: Regular expressions for which files to get
+ - file_regex: Regular expression for which files to get
  - -a: Supply authentication information. These can be either:
    - A string in the format "user:pass"
    - A txt containing "user:pass"

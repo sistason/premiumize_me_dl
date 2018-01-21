@@ -3,7 +3,6 @@ import json
 import logging
 import aiohttp
 import asyncio
-import zipfile
 import getpass
 import subprocess
 import concurrent.futures
@@ -32,7 +31,6 @@ class PremiumizeMeAPI:
             self.aiohttp_session.close()
 
     async def wait_for_torrent(self, upload_):
-        #TODO: Test after API-Change
         logging.info('Waiting for premiumize.me to finish downloading the torrent...')
         transfer = None
         while transfer is None or transfer.is_running() and transfer.status != 'error':
@@ -64,17 +62,14 @@ class PremiumizeMeAPI:
 
                 file_destination = os.path.join(download_directory, file.name)
                 return_codes.append(await self.event_loop.run_in_executor(self.process_pool,
-                                                             self._download_file_wget_process,
-                                                             file, file_destination))
+                                                                          self._download_file_wget_process,
+                                                                          file, file_destination))
         return False not in return_codes
 
-    def _download_file_wget_process(self, file, file_destination):
+    @staticmethod
+    def _download_file_wget_process(file, file_destination):
         proc = subprocess.run(['wget', file.link, '-qO', file_destination, '--show-progress'])
-        if proc.returncode == 0:
-            #self._unzip(file_destination)
-            return True
-        else:
-            return False
+        return proc.returncode == 0
 
     async def upload(self, torrent):
         src = None
@@ -122,24 +117,15 @@ class PremiumizeMeAPI:
         logging.error('No file for transfer "{}" found, status is: "{}"'.format(transfer_.name, transfer_.status_msg()))
 
     async def get_files_to_download(self, item):
-        #TODO: Test after API-Change
         if type(item) is File:
             return [item]
 
-        # Currently download every file separately, since zip-generation is broken (in my code) right now
         response_text = await self._make_request('/folder/list', data={'id': item.id})
         success, response_json = self._validate_to_json(response_text)
         if success:
             return [File(file_) for file_ in response_json.get('content', [])]
 
-        # TODO: how to generate a zip from folder
-        # TODO: how to handle Torrents? Test with long-running torrent (low seeders)
-        # response_text = await self._make_request('/zip/generate', data={'items': {'folders': [file_.to_data()]}})
-        # success, response_json = self._validate_to_json(response_text)
-        # if success:
-        #     return File(response_json)
-
-        logging.error('Could not download "{}": {}'.format(file_.name, response_json.get('message', '?')))
+        logging.error('Could not download "{}": {}'.format(item.name, response_json.get('message', '?')))
 
     async def update_files(self):
         if self.file_list_cached:
@@ -221,16 +207,6 @@ class PremiumizeMeAPI:
         if response_json.get('status') == 'error':
             return False, response_json
         return True, response_json
-
-    @staticmethod
-    def _unzip(file_destination):
-        try:
-            # TODO: what if file is not zipped?
-            z = zipfile.ZipFile(file_destination)
-            z.extractall(path=os.path.dirname(file_destination))
-            os.remove(file_destination)
-        except zipfile.error as e:
-            logging.warning('Unzipping of "{}" failed: {}'.format(file_destination, e))
 
     def _file_exists(self, file_, directory):
         path_ = os.path.join(directory, file_.name)
