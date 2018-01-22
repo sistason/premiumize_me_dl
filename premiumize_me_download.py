@@ -35,12 +35,22 @@ class PremiumizeMeDownloader:
             success = await self.api.download_file(file_, self.download_directory)
 
         if success:
-            await self._delete_file(file_)
+            await self._cleanup_file(file_)
 
-    async def _delete_file(self, file_):
+    async def _cleanup_file(self, file):
         now = datetime.datetime.now()
-        if self.delete_after.days > -1 and file_.created_at + self.delete_after < now:
-            await self.api.delete(file_)
+        if self.delete_after.days < 0:
+            return
+
+        files = await self.api.get_files_to_download(file)
+        files_in_folder = len(files)
+        for file_ in files:
+            if file_.created_at + self.delete_after < now:
+                if await self.api.delete(file_):
+                    files_in_folder -= 1
+
+        if file.type == 'folder' and files_in_folder == 0:
+            await self.api.delete(file)
 
     def __bool__(self):
         return bool(self.api)
