@@ -90,7 +90,7 @@ class PremiumizeMeAPI:
         if not file_ or not file_.id:
             return True
         if type(file_) is File:
-            response_text = await self._make_request('/item/delete', data={'id': file_.id})
+            response_text = await self._make_request('/file/delete', data={'id': file_.id})
         elif type(file_) is Folder:
             response_text = await self._make_request('/folder/delete', data={'id': file_.id})
         elif type(file_) is Transfer:
@@ -102,6 +102,7 @@ class PremiumizeMeAPI:
         if success:
             self.file_list_cached = None
             return True
+
         logging.error('Could not delete file {}: {}'.format(file_, response_json.get('message')))
         return False
 
