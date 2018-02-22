@@ -103,10 +103,12 @@ class Transfer(BaseAttributes):
 
 
 class Download:
-    def __init__(self, properties):
-        self.zip = properties.get('zip', '')
-        content_keys = properties.get('content', {}).keys()
-        self.name = list(content_keys)[0] if content_keys else ''
+    def __init__(self, properties, item):
+        self.name = item.name + '.zip'
+        self.type = 'generated-zip'
+        self.link = properties.get('location', '')
+        self.size = -1
+        self.size_in_mb = -1
 
     def __str__(self):
         return '{s.name}'.format(s=self)

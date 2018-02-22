@@ -16,7 +16,7 @@ class PremiumizeMeDownloader:
         self.api = PremiumizeMeAPI(auth, event_loop=self.event_loop)
 
         self.delete_after = datetime.timedelta(days=delete_after_download_days)
-        self.cleanup = cleanup
+        self.only_cleanup = cleanup
         self.download_directory = download_directory
 
     def close(self):
@@ -29,28 +29,27 @@ class PremiumizeMeDownloader:
         await tasks
 
     async def _download_file(self, file_):
-        if self.cleanup:
+        if self.only_cleanup:
             success = True
         else:
             success = await self.api.download_file(file_, self.download_directory)
 
         if success:
-            await self._cleanup_file(file_)
+            await self._cleanup_item(file_)
+        else:
+            logging.error('Could not download "{}"'.format(file_.name))
 
-    async def _cleanup_file(self, file):
+    async def _cleanup_item(self, item):
         now = datetime.datetime.now()
         if self.delete_after.days < 0:
             return
 
-        files = await self.api.get_files_to_download(file)
-        files_in_folder = len(files)
-        for file_ in files:
-            if file_.created_at + self.delete_after < now:
-                if await self.api.delete(file_):
-                    files_in_folder -= 1
-
-        if file.type == 'folder' and files_in_folder == 0:
-            await self.api.delete(file)
+        # Check if the file is old enough to delete or
+        # if a folder is old enough, by checking if a file in that folder is old enough.
+        if item.type == 'file' and item.created_at + self.delete_after > now or \
+           item.type == 'folder' and [i for i in await self.api.list_folder(item) if
+                                      i.type == 'file' and i.created_at + self.delete_after > now]:
+            await self.api.delete(item)
 
     def __bool__(self):
         return bool(self.api)
@@ -87,7 +86,7 @@ if __name__ == '__main__':
     args = argparser.parse_args()
 
     logging.basicConfig(format='%(message)s',
-                        level=logging.INFO)
+                        level=logging.DEBUG)
 
     event_loop_ = asyncio.get_event_loop()
     dl = PremiumizeMeDownloader(args.download_directory, args.auth, event_loop_,
