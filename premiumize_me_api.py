@@ -209,9 +209,6 @@ class PremiumizeMeAPI:
         if self.aiohttp_session is None:
             self.aiohttp_session = aiohttp.ClientSession(loop=self.event_loop)
 
-        print(data_)
-        if url == '/zip/generate':
-            self.url = 'https://www.premiumize.me/api'
         retries = 3
         for _ in range(retries):
             try:

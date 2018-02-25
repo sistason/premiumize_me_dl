@@ -46,7 +46,7 @@ class PremiumizeMeDownloader:
 
         # Check if the file is old enough to delete or
         # if a folder is old enough, by checking if a file in that folder is old enough.
-        if item.type == 'file' and item.created_at + self.delete_after > now or \
+        if item.type == 'file' and item.created_at + self.delete_after < now or \
            item.type == 'folder' and [i for i in await self.api.list_folder(item) if
                                       i.type == 'file' and i.created_at + self.delete_after > now]:
             await self.api.delete(item)
@@ -86,7 +86,7 @@ if __name__ == '__main__':
     args = argparser.parse_args()
 
     logging.basicConfig(format='%(message)s',
-                        level=logging.DEBUG)
+                        level=logging.INFO)
 
     event_loop_ = asyncio.get_event_loop()
     dl = PremiumizeMeDownloader(args.download_directory, args.auth, event_loop_,
