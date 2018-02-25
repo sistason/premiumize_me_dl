@@ -61,14 +61,6 @@ class File(BaseAttributes):
         return '{s.id}: {s.name} ({s.size_in_mb}MB)'.format(s=self)
 
 
-class Upload(BaseAttributes):
-    def __init__(self, properties):
-        super().__init__(properties)
-
-    def __str__(self):
-        return '{s.name}: {s.id}'.format(s=self)
-
-
 class Transfer(BaseAttributes):
     def __init__(self, properties):
         super().__init__(properties)
@@ -91,7 +83,7 @@ class Transfer(BaseAttributes):
         self.eta = properties.get('eta')
 
     def is_running(self):
-        return self.status == 'queued' or \
+        return self.status == 'queued' or self.status == 'running' or \
                (self.status == 'waiting' and self.status_msg() and
                 not self.status_msg().startswith('Torrent did not finish for '))
 

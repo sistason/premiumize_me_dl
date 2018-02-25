@@ -9,7 +9,7 @@ import datetime
 import subprocess
 import concurrent.futures
 
-from premiumize_me_dl.premiumize_me_objects import Transfer, Download, Upload, File, Folder
+from premiumize_me_dl.premiumize_me_objects import Transfer, Download, File, Folder
 
 # Premiumize.me API Version
 __version__ = 3
@@ -37,19 +37,45 @@ class PremiumizeMeAPI:
         if self.aiohttp_session is not None:
             await self.aiohttp_session.close()
 
-    async def wait_for_torrent(self, upload_):
-        # TODO: timeout, grace-period, etc. Fails while pulling finished torrent into file-list
+    async def download(self, item, download_directory):
+        if type(item) in [File or Folder]:
+            return await self.download_file(item, download_directory)
+        if type(item) == Transfer:
+            return await self.download_transfer(item, download_directory)
+        else:
+            logging.error('Unable to download "{}", unknown type'.format(item))
+            return False
 
-        logging.info('Waiting for premiumize.me to finish downloading the torrent...')
-        transfer = None
-        while transfer is None or transfer.is_running() and transfer.status != 'error':
-            await asyncio.sleep(2)
+    async def download_transfer(self, transfer, download_directory):
+        if not await self.wait_for_torrent(transfer):
+            await self.delete(transfer)
+            return
+        file_ = await self.get_file_from_transfer(transfer)
+        if file_:
+            return await self.download_file(file_, download_directory)
 
-            for transfer_ in await self.get_transfers():
-                if transfer_.id == upload_.id:
-                    transfer = transfer_
-            logging.info('  Status: {}'.format(transfer.status_msg()))
-        return transfer
+    async def wait_for_torrent(self, transfer):
+        start = datetime.datetime.now()
+        finished = None
+        logging.info('Waiting for premiumize.me to finish downloading the torrent "{}"...'.format(transfer.name))
+        while finished is None:
+            transfer = await self.get_transfer(transfer.id)
+            finished = self.is_transfer_finished(transfer, start)
+            logging.info('  {} | Status: {}; Message: {}'.format('Run' if transfer.is_running() else 'Idle',
+                                                                 transfer.status, transfer.message))
+            if finished is None:
+                await asyncio.sleep(2)
+
+        return finished
+
+    @staticmethod
+    def is_transfer_finished(transfer, start_time):
+        if transfer.is_running() and transfer.status != 'error':
+            return None
+        if transfer.message == 'Loading...' and (datetime.datetime.now() - start_time).seconds > 10 * 60:
+            logging.error('Torrent {} didn\'t finish loading, aborted'.format(transfer.name))
+            return False
+        return True
 
     async def download_file(self, item, download_directory):
         file = None
@@ -112,11 +138,15 @@ class PremiumizeMeAPI:
         success, response_json = self._validate_to_json(response_text)
         if success:
             self.file_list_cached = None
-            return Upload(response_json)
+            return await self.get_transfer(response_json.get('id'))
+        if response_json.get('error') == 'duplicate':
+            logging.debug('Torrent was already in the transfer list, continuing...')
+            return await self.get_transfer(response_json.get('id'))
+
         logging.error('Could not upload torrent {}: {}'.format(torrent, response_json.get('message')))
         return None
 
-    async def delete(self, item_):
+    async def delete(self, item_, deep=False):
         if not item_ or not item_.id:
             return True
         if type(item_) is File:
@@ -124,6 +154,9 @@ class PremiumizeMeAPI:
         elif type(item_) is Folder:
             response_text = await self._make_request('/folder/delete', data={'id': item_.id})
         elif type(item_) is Transfer:
+            if deep:
+                item_file_folder = await self.get_file_from_transfer(item_)
+                await self.delete(item_file_folder)
             response_text = await self._make_request('/transfer/delete', data={'id': item_.id})
         else:
             logging.error('Unknown type of file to delete: {}'.format(item_))
@@ -137,7 +170,7 @@ class PremiumizeMeAPI:
         return False
 
     async def get_file_from_transfer(self, transfer_):
-        for file_ in self.get_files():
+        for file_ in await self.get_files():
             if (file_.type == 'folder' and file_.id == transfer_.folder_id) or \
                (file_.type == 'file' and file_.id == transfer_.file_id):
                 return file_
@@ -185,6 +218,11 @@ class PremiumizeMeAPI:
             self.transfer_list_cached = await self._update_transfers()
 
         return self.transfer_list_cached or []
+
+    async def get_transfer(self, id):
+        for transfer in await self.get_transfers():
+            if id == transfer.id:
+                return transfer
 
     async def _update_transfers(self):
         response_text = await self._make_request('/transfer/list')
