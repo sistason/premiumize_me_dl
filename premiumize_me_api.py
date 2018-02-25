@@ -33,9 +33,9 @@ class PremiumizeMeAPI:
         self.max_simultaneous_downloads = asyncio.Semaphore(2)
         self.process_pool = concurrent.futures.ThreadPoolExecutor(4)
 
-    def close(self):
+    async def close(self):
         if self.aiohttp_session is not None:
-            self.aiohttp_session.close()
+            await self.aiohttp_session.close()
 
     async def wait_for_torrent(self, upload_):
         # TODO: timeout, grace-period, etc. Fails while pulling finished torrent into file-list

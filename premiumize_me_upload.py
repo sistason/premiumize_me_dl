@@ -10,12 +10,10 @@ class PremiumizeMeUploader:
     url = 'https://www.premiumize.me/api'
 
     def __init__(self, auth, event_loop=None):
-        self.event_loop = asyncio.get_event_loop() if event_loop is None else event_loop
-        self.api = PremiumizeMeAPI(auth, event_loop=self.event_loop)
+        self.api = PremiumizeMeAPI(auth, event_loop=event_loop)
 
-    def close(self):
-        self.api.close()
-        self.event_loop.close()
+    async def close(self):
+        await self.api.close()
 
     async def upload_files(self, torrents):
         download_ids = [asyncio.ensure_future(self.api.upload(torrent)) for torrent in torrents]
@@ -43,13 +41,14 @@ if __name__ == '__main__':
     logging.basicConfig(format='%(message)s',
                         level=logging.INFO)
 
-    dl = PremiumizeMeUploader(args.auth)
+    event_loop_ = asyncio.get_event_loop()
+    dl = PremiumizeMeUploader(args.auth, event_loop=event_loop_)
     if not dl:
         sys.exit(1)
 
     try:
-        dl.event_loop.run_until_complete(dl.upload_files(args.files))
+        event_loop_.run_until_complete(dl.upload_files(args.files))
     except KeyboardInterrupt:
         pass
     finally:
-        dl.close()
+        event_loop_.run_until_complete(dl.close())

@@ -12,15 +12,14 @@ class PremiumizeMeDownloader:
     url = 'https://www.premiumize.me/api'
 
     def __init__(self, download_directory, auth, event_loop=None, delete_after_download_days=-1, cleanup=False):
-        self.event_loop = asyncio.get_event_loop() if event_loop is None else event_loop
-        self.api = PremiumizeMeAPI(auth, event_loop=self.event_loop)
+        self.api = PremiumizeMeAPI(auth, event_loop=event_loop)
 
         self.delete_after = datetime.timedelta(days=delete_after_download_days)
         self.only_cleanup = cleanup
         self.download_directory = download_directory
 
-    def close(self):
-        self.api.close()
+    async def close(self):
+        await self.api.close()
 
     async def download_files(self, filter_regex):
         regex = re.compile(filter_regex, re.IGNORECASE)
@@ -44,10 +43,11 @@ class PremiumizeMeDownloader:
         if self.delete_after.days < 0:
             return
 
+        logging.info('Cleaning up {} "{}"...'.format(item.type, item.name))
         # Check if the file is old enough to delete or
         # if a folder is old enough, by checking if a file in that folder is old enough.
         if item.type == 'file' and item.created_at + self.delete_after < now or \
-           item.type == 'folder' and [i for i in await self.api.list_folder(item) if
+           item.type == 'folder' and not [i for i in await self.api.list_folder(item) if
                                       i.type == 'file' and i.created_at + self.delete_after > now]:
             await self.api.delete(item)
 
@@ -100,4 +100,4 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         pass
     finally:
-        dl.close()
+        event_loop_.run_until_complete(dl.close())
