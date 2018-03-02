@@ -171,6 +171,8 @@ class PremiumizeMeAPI:
         return False
 
     async def get_file_from_transfer(self, transfer_):
+        if type(transfer_) is not Transfer:
+            return
         for file_ in await self.get_files():
             if (file_.type == 'folder' and file_.id == transfer_.folder_id) or \
                (file_.type == 'file' and file_.id == transfer_.file_id):
