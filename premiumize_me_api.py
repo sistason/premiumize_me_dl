@@ -70,9 +70,10 @@ class PremiumizeMeAPI:
 
     @staticmethod
     def is_transfer_finished(transfer, start_time):
-        if transfer.is_running() and transfer.status != 'error':
+        if transfer is not None and transfer.is_running() and transfer.status != 'error':
             return None
-        if transfer.message == 'Loading...' and (datetime.datetime.now() - start_time).seconds > 10 * 60:
+        if transfer is not None and transfer.message == 'Loading...' and \
+                (datetime.datetime.now() - start_time).seconds > 10 * 60:
             logging.error('Torrent {} didn\'t finish loading, aborted'.format(transfer.name))
             return False
         return True
