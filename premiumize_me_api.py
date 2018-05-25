@@ -147,7 +147,7 @@ class PremiumizeMeAPI:
         logging.error('Could not upload torrent {}: {}'.format(torrent, response_json.get('message')))
         return None
 
-    async def delete(self, item_, deep=False):
+    async def delete(self, item_):
         if not item_ or not item_.id:
             return True
         if type(item_) is File:
@@ -155,9 +155,6 @@ class PremiumizeMeAPI:
         elif type(item_) is Folder:
             response_text = await self._make_request('/folder/delete', data={'id': item_.id})
         elif type(item_) is Transfer:
-            if deep:
-                item_file_folder = await self.get_file_from_transfer(item_)
-                await self.delete(item_file_folder)
             response_text = await self._make_request('/transfer/delete', data={'id': item_.id})
         else:
             logging.error('Unknown type of file to delete: {}'.format(item_))
