@@ -83,23 +83,14 @@ class PremiumizeMeAPI:
         if type(item) is File:
             file = item
         elif type(item) is Folder:
-            USE_ZIP = False
-            if USE_ZIP:
-                response_text = await self._make_request('/zip/generate',
-                                                         data={'folders': ','.join([item.id])})
-                success, response_json = self._validate_to_json(response_text)
-                print(response_json)
-                if success:
-                    file = Download(response_json, item)
-                else:
-                    logging.error('Could not download "{}": {}'.format(item.name, response_json.get('message', '?')))
+            response_text = await self._make_request('/zip/generate',
+                                                     data={'folders[]': [item.id]})
+            success, response_json = self._validate_to_json(response_text)
+            print(response_json)
+            if success:
+                file = Download(response_json, item)
             else:
-                folder_list = await self.list_folder(item)
-                success = True
-                for item_ in folder_list:
-                    if not await self.download_file(item_, os.path.join(download_directory, item.name)):
-                        success = False
-                return success
+                logging.error('Could not download "{}": {}'.format(item.name, response_json.get('message', '?')))
         else:
             logging.error('Don\'t know how to download "{}"'.format(item))
 
