@@ -50,9 +50,13 @@ class PremiumizeMeAPI:
         if not await self.wait_for_torrent(transfer):
             await self.delete(transfer)
             return
-        file_ = await self.get_file_from_transfer(transfer)
-        if file_:
-            return await self.download_file(file_, download_directory)
+
+        for _ in range(5):
+            transfer = await self.get_transfer(transfer.id)
+            await asyncio.sleep(1)
+            file_ = await self.get_file_from_transfer(transfer)
+            if file_:
+                return await self.download_file(file_, download_directory)
 
     async def wait_for_torrent(self, transfer):
         start = datetime.datetime.now()
@@ -90,7 +94,7 @@ class PremiumizeMeAPI:
             if success:
                 file = Download(response_json, item)
             else:
-                logging.error('Could not download "{}": {}'.format(item.name, response_json.get('message', '?')))
+                logging.error('Could not create zip "{}": {}'.format(item.name, response_json.get('message', '?')))
         else:
             logging.error('Don\'t know how to download "{}"'.format(item))
 
