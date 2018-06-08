@@ -90,7 +90,6 @@ class PremiumizeMeAPI:
             response_text = await self._make_request('/zip/generate',
                                                      data={'folders[]': [item.id]})
             success, response_json = self._validate_to_json(response_text)
-            print(response_json)
             if success:
                 file = Download(response_json, item)
             else:
