@@ -203,6 +203,7 @@ class PremiumizeMeAPI:
             return file_list
         else:
             logging.error('Error while getting folder "{}". Was: {}'.format(folder, response_json.get('message')))
+            return []
 
     async def get_transfers(self, force=False):
         now = datetime.datetime.now()
