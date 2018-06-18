@@ -47,7 +47,7 @@ class PremiumizeMeAPI:
             return False
 
     async def download_transfer(self, transfer, download_directory):
-        if not await self.wait_for_torrent(transfer):
+        if not await self.wait_for_transfer(transfer):
             await self.delete(transfer)
             return
 
@@ -58,7 +58,7 @@ class PremiumizeMeAPI:
             if file_:
                 return await self.download_file(file_, download_directory)
 
-    async def wait_for_torrent(self, transfer):
+    async def wait_for_transfer(self, transfer):
         start = datetime.datetime.now()
         finished = None
         logging.info('Waiting for premiumize.me to finish downloading the torrent "{}"...'.format(transfer.name))
@@ -107,7 +107,8 @@ class PremiumizeMeAPI:
             return True
 
         async with self.max_simultaneous_downloads:
-            logging.info('Downloading {} ({} MB)...'.format(file.name, file.size_in_mb))
+            size_ = '({} MB)'.format(file.size_in_mb) if file.size_in_mb else ''
+            logging.info('Downloading {}{}...'.format(file.name, size_))
 
             file_destination = os.path.join(download_directory, file.name)
             success = await self.event_loop.run_in_executor(self.process_pool,
@@ -214,9 +215,11 @@ class PremiumizeMeAPI:
 
         return self.transfer_list_cached or []
 
-    async def get_transfer(self, id):
+    async def get_transfer(self, id_):
+        if type(id_) is Transfer:
+            id_ = id_.id
         for transfer in await self.get_transfers():
-            if id == transfer.id:
+            if id_ == transfer.id:
                 return transfer
 
     async def _update_transfers(self):
