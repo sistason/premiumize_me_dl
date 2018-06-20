@@ -64,7 +64,7 @@ class PremiumizeMeCleaner:
         return failed_
 
     def get_stale_transfers(self, transfers):
-        pttrn_ = re.compile(r'(?i)Downloading at 0 mbit/s from \d peers\. \d% of [\d.]+ \wB finished\. ETA is unknown')
+        pttrn_ = re.compile(r'(?i)Downloading at 0 mbit/s from \d peers\. \d% of [\d.]+ (\wB|Bytes) finished\. ETA is unknown')
         stale_ = []
         for transfer in transfers:
             if transfer.message is not None and (transfer.message == 'Loading...' or
