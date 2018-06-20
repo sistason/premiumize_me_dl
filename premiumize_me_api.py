@@ -156,7 +156,10 @@ class PremiumizeMeAPI:
             return True
         success, response_json = self._validate_to_json(response_text)
         if success:
-            self.file_list_cached = None
+            if type(item_) is Transfer:
+                self.transfer_list_cached = None
+            else:
+                self.file_list_cached = None
             return True
 
         logging.error('Could not delete file {}: {}'.format(item_, response_json.get('message')))
