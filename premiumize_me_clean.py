@@ -19,10 +19,14 @@ class PremiumizeMeCleaner:
             try:
                 with open(file_location) as f:
                     self.last_transfer_ids = f.read().split('\n')
+            except:
+                pass
 
+            try:
                 self.prev_file = open(file_location, 'w+')
                 break
-            except (FileNotFoundError, PermissionError, TypeError):
+            except (FileNotFoundError, PermissionError, TypeError) as f:
+                print(file_location, f)
                 pass
 
     async def close(self):
@@ -41,6 +45,9 @@ class PremiumizeMeCleaner:
         self.write_transfers(transfers)
 
     def write_transfers(self, transfers):
+        if self.prev_file is None or self.prev_file.closed:
+            return
+
         self.prev_file.flush()
         for transfer in transfers:
             self.prev_file.write("{}\n".format(transfer.id))
@@ -78,7 +85,9 @@ if __name__ == '__main__':
     from os import path, access, R_OK, W_OK
 
     def argcheck_file(string):
-        if path.isfile(string) and access(string, W_OK) and access(string, R_OK):
+        if access(path.abspath(path.dirname(string)), W_OK) or (path.isfile(string) and
+                                                                access(string, W_OK) and
+                                                                access(string, R_OK)):
             return path.abspath(string)
         raise argparse.ArgumentTypeError('{} is no file or isn\'t writeable'.format(string))
 
