@@ -123,24 +123,32 @@ class PremiumizeMeAPI:
     def _download_file_wget_process(file, file_destination):
         return subprocess.run(['wget', file.link, '-qO', file_destination, '--show-progress']).returncode == 0
 
-    async def upload(self, torrent):
+    async def upload(self, torrent, direct_dl=False):
         src = None
         if type(torrent) is str:
             src = torrent
         elif str(torrent.__class__).rsplit('.', 1)[-1].startswith('PirateBayResult'):
             src = torrent.magnet
 
-        response_text = await self._make_request("/transfer/create", data={'src': src})
+        endpoint = "/transfer/directdl" if direct_dl else "/transfer/create"
+        response_text = await self._make_request(endpoint, data={'src': src})
         success, response_json = self._validate_to_json(response_text)
-        if success:
-            self.file_list_cached = None
-            return await self.get_transfer(response_json.get('id'))
-        if response_json.get('error') == 'duplicate':
-            logging.debug('Torrent was already in the transfer list, continuing...')
-            return await self.get_transfer(response_json.get('id'))
+        if direct_dl:
+            if success:
+                return [c.get('link') for c in response_json.get('content', [])]
+            else:
+                logging.error('Could not get direct-download link {}: {}'.format(src, response_json.get('message')))
+                return
+        else:
+            if success:
+                self.file_list_cached = None
+                return await self.get_transfer(response_json.get('id'))
+            if response_json.get('error') == 'duplicate':
+                logging.debug('Torrent was already in the transfer list, continuing...')
+                return await self.get_transfer(response_json.get('id'))
 
         logging.error('Could not upload torrent {}: {}'.format(torrent, response_json.get('message')))
-        return None
+        return
 
     async def delete(self, item_):
         if not item_ or not item_.id:
