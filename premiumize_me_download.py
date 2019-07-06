@@ -22,6 +22,11 @@ class PremiumizeMeDownloader:
         await self.api.close()
 
     async def download_files(self, filter_regex):
+        if re.match(r'https?://', filter_regex):
+            # Download-Link, try as oneclickhoster
+            await self.api.download_directdl(filter_regex, self.download_directory)
+            return
+
         regex = re.compile(filter_regex, re.IGNORECASE)
         file_list = await self.api.get_files()
         tasks = asyncio.gather(*[self._download_file(file_) for file_ in file_list if file_.matches(regex)])

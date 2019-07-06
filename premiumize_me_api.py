@@ -82,9 +82,22 @@ class PremiumizeMeAPI:
             return False
         return True
 
+    async def download_directdl(self, url, download_directory):
+        response_text = await self._make_request('/transfer/directdl', data={'src': url})
+        success, response_json = self._validate_to_json(response_text)
+        if success:
+            name = url.split('/')[-1]
+            tasks = asyncio.gather(*[self.download_file(Download({'location': c.get('link')}, name), download_directory)
+                                     for c in response_json.get('content', [])])
+            await tasks
+            return True
+        else:
+            logging.error('Could not get direct-download link {}: {}'.format(src, response_json.get('message')))
+            return False
+
     async def download_file(self, item, download_directory):
         file = None
-        if type(item) is File:
+        if type(item) is File or type(item) is Download:
             file = item
         elif type(item) is Folder:
             response_text = await self._make_request('/zip/generate',
@@ -123,29 +136,21 @@ class PremiumizeMeAPI:
     def _download_file_wget_process(file, file_destination):
         return subprocess.run(['wget', file.link, '-qO', file_destination, '--show-progress']).returncode == 0
 
-    async def upload(self, torrent, direct_dl=False):
+    async def upload(self, torrent):
         src = None
         if type(torrent) is str:
             src = torrent
         elif str(torrent.__class__).rsplit('.', 1)[-1].startswith('PirateBayResult'):
             src = torrent.magnet
 
-        endpoint = "/transfer/directdl" if direct_dl else "/transfer/create"
-        response_text = await self._make_request(endpoint, data={'src': src})
+        response_text = await self._make_request("/transfer/create", data={'src': src})
         success, response_json = self._validate_to_json(response_text)
-        if direct_dl:
-            if success:
-                return [c.get('link') for c in response_json.get('content', [])]
-            else:
-                logging.error('Could not get direct-download link {}: {}'.format(src, response_json.get('message')))
-                return
-        else:
-            if success:
-                self.file_list_cached = None
-                return await self.get_transfer(response_json.get('id'))
-            if response_json.get('error') == 'duplicate':
-                logging.debug('Torrent was already in the transfer list, continuing...')
-                return await self.get_transfer(response_json.get('id'))
+        if success:
+            self.file_list_cached = None
+            return await self.get_transfer(response_json.get('id'))
+        if response_json.get('error') == 'duplicate':
+            logging.debug('Torrent was already in the transfer list, continuing...')
+            return await self.get_transfer(response_json.get('id'))
 
         logging.error('Could not upload torrent {}: {}'.format(torrent, response_json.get('message')))
         return

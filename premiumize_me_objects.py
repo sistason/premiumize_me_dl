@@ -96,9 +96,9 @@ class Transfer(BaseAttributes):
 
 class Download:
     def __init__(self, properties, item):
-        self.name = item.name + '.zip'
-        self.type = 'generated-zip'
+        self.name = item.name + '.zip' if hasattr(item, 'name') else item
         self.link = properties.get('location', '')
+        self.type = 'generated-zip' if hasattr(item, 'name') or self.link.endswith('.zip') else ''
         self.size = -1
         self.size_in_mb = -1
 
