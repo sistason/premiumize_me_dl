@@ -25,8 +25,8 @@ class PremiumizeMeAPI:
 
         self.file_list_cached = None
         self.file_list_cache_valid_until = datetime.datetime.fromtimestamp(0)
-        self.transfer_list_cached = None
-        self.transfer_list_cache_valid_until = datetime.datetime.fromtimestamp(0)
+        self.folder_list_cached = None
+        self.folder_list_cache_valid_until = datetime.datetime.fromtimestamp(0)
 
         self.aiohttp_session = None
 
@@ -170,7 +170,7 @@ class PremiumizeMeAPI:
         success, response_json = self._validate_to_json(response_text)
         if success:
             if type(item_) is Transfer:
-                self.transfer_list_cached = None
+                self.folder_list_cached = None
             else:
                 self.file_list_cached = None
             return True
@@ -222,6 +222,7 @@ class PremiumizeMeAPI:
             logging.error('Error while getting folder "{}". Was: {}'.format(folder, response_json.get('message')))
             return []
 
+    """
     async def get_transfers(self, force=False):
         now = datetime.datetime.now()
         if self.transfer_list_cache_valid_until > now or force:
@@ -229,7 +230,41 @@ class PremiumizeMeAPI:
         if self.transfer_list_cached is None:
             self.transfer_list_cached = await self._update_transfers()
 
-        return self.transfer_list_cached or []
+        return self.file_list_cached or []
+
+    async def _update_transfers(self):
+        transfer_list = await self.list_transfers()
+        if transfer_list:
+            self.transfer_list_cache_valid_until = datetime.datetime.now() + datetime.timedelta(seconds=self.CACHE_TIME)
+            return transfer_list
+
+    async def list_transfer(self, transfer=None):
+        if transfer:
+            folder = {'id': transfer.id}
+        response_text = await self._make_request('/transfers/list', data=transfer)
+        success, response_json = self._validate_to_json(response_text)
+        if success:
+            transfer_list = []
+            for properties_ in response_json.get('content', []):
+                if not properties_:
+                    continue
+                if properties_.get('type', '') == 'file':
+                    transfer_list.append(File(properties_))
+                if properties_.get('type', '') == 'folder':
+                    transfer_list.append(Folder(properties_))
+            return transfer_list
+        else:
+            logging.error('Error while getting folder "{}". Was: {}'.format(transfer, response_json.get('message')))
+            return []
+        """
+    async def get_transfers(self, force=False):
+        now = datetime.datetime.now()
+        if self.folder_list_cache_valid_until > now or force:
+            self.folder_list_cached = None
+        if self.folder_list_cached is None:
+            self.folder_list_cached = await self._update_transfers()
+
+        return self.folder_list_cached or []
 
     async def get_transfer(self, id_):
         if type(id_) is Transfer:
@@ -249,7 +284,7 @@ class PremiumizeMeAPI:
                     await self.delete(transfer_)
                 else:
                     transfers.append(transfer_)
-            self.transfer_list_cache_valid_until = datetime.datetime.now() + datetime.timedelta(seconds=self.CACHE_TIME)
+            self.folder_list_cache_valid_until = datetime.datetime.now() + datetime.timedelta(seconds=self.CACHE_TIME)
             return transfers
         logging.error('Error while getting transfers. Was: {}'.format(response_json.get('message')))
 

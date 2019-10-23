@@ -32,6 +32,16 @@ class PremiumizeMeDownloader:
         tasks = asyncio.gather(*[self._download_file(file_) for file_ in file_list if file_.matches(regex)])
         await tasks
 
+    async def list_transfers(self, filter_regex):
+        regex = re.compile(filter_regex, re.IGNORECASE)
+
+        transfer_list = await self.api.get_transfers()
+
+        matched_transfers = [file_ for file_ in transfer_list if file_.matches(regex)]
+        max_length = len(max(matched_transfers, key=lambda f: len(f.name)).name)
+        for transfer in matched_transfers:
+            print('{0:<{1}}: {2}'.format(transfer.name, max_length, transfer.status_msg()))
+
     async def _download_file(self, file_):
         if self.only_cleanup:
             success = True
@@ -87,6 +97,8 @@ if __name__ == '__main__':
                            help="Delete files from My Files after successful download")
     argparser.add_argument('-c', '--cleanup', action='store_true',
                            help="Don't download files, just cleanup. Use with -d")
+    argparser.add_argument('-l', '--list', action='store_true',
+                           help="Get the list of files in your cloud")
 
     args = argparser.parse_args()
 
@@ -101,7 +113,10 @@ if __name__ == '__main__':
         sys.exit(1)
 
     try:
-        event_loop_.run_until_complete(dl.download_files(args.file_regex))
+        if args.list:
+            event_loop_.run_until_complete(dl.list_transfers(args.file_regex))
+        else:
+            event_loop_.run_until_complete(dl.download_files(args.file_regex))
     except KeyboardInterrupt:
         pass
     finally:
