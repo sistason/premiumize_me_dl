@@ -3,7 +3,7 @@ import asyncio
 import logging
 import sys
 
-from premiumize_me_dl.premiumize_me_api import PremiumizeMeAPI
+from premiumizeme.api import PremiumizeMeAPI
 
 
 class PremiumizeMeUploader:

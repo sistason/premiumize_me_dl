@@ -9,7 +9,7 @@ import datetime
 import subprocess
 import concurrent.futures
 
-from premiumize_me_dl.premiumize_me_objects import Transfer, Download, File, Folder
+from premiumizeme.objects import Transfer, Download, File, Folder
 
 # Premiumize.me API Version
 __version__ = 3
