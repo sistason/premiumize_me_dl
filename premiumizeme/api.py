@@ -352,7 +352,7 @@ class PremiumizeMeAPI:
     @staticmethod
     def _read_auth(auth):
         if not auth:
-            auth = os.path.join(os.path.dirname(__file__), 'auth.txt')
+            auth = os.path.join(os.path.expanduser('~'), '.premiumize_me_auth.txt')
 
         if ':' in auth:
             username, password = auth.strip().split(':')

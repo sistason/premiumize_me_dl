@@ -8,8 +8,8 @@ Download/Upload your premiumize.me torrents via cli
  - file_regex: Regular expression for which files to get
  - -a: Supply authentication information. These can be either:
    - A string in the format "user:pass"
-   - A txt containing "user:pass"
-   - optional, looks for a auth.txt in the file-directory, otherwise asks.
+   - A file-path containing "user:pass"
+   - Default: it looks for a .premiumize_me_auth.txt in the home directory, otherwise asks.
  - -d, --delete: Delete downloaded $files, if they are older than $day days.
  - -c, --cleanup: Ignore $files, just delete all files older than $days.
 
@@ -18,10 +18,8 @@ Download/Upload your premiumize.me torrents via cli
 
 `python3 premiumize_me_upload.py link [link, ...] [-a auth]`
  - link: Anything the premiumize.me downloader likes (pirate-bay-url, magnet, ...)
- - -a: Supply authentication information. These can be either:
-   - A string in the format "user:pass"
-   - A file containing "user:pass"
-   - optional, looks for the auth-file in the file-directory otherwise or asks.
+ - -a: Supply authentication information. <see above>
+   
 
 ## Dependencies
  - python 3.5+ (asyncio)
