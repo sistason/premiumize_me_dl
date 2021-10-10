@@ -1,4 +1,5 @@
 import datetime
+import re
 
 
 def _convert_size(size):
@@ -81,6 +82,8 @@ class Transfer(BaseAttributes):
         self.speed_down = properties.get('speed_down')
         self.speed_up = properties.get('speed_up')
         self.eta = properties.get('eta')
+        src_ = properties.get('src')
+        self.src = TransferSrc(src_) if src_ else None
 
     def is_running(self):
         return self.status == 'queued' or self.status == 'running' or \
@@ -104,3 +107,19 @@ class Download:
 
     def __str__(self):
         return '{s.name}'.format(s=self)
+
+
+class TransferSrc:
+    id = None
+    name = None
+    trackers = []
+
+    def __init__(self, string_):
+        id_re = re.match(r"^(magnet:.*?)(?=&|$)", string_)
+        if id_re:
+            self.id = id_re.group(0).upper() if id_re else None
+            name_re = re.search(r"&dn=(.*?)(?=&|$)", string_)
+            self.name = name_re.group(0) if name_re else None
+            self.trackers = re.findall(r"&tr=(.*?)(?=&tr|$)", string_)
+        if string_.startswith('https://www.premiumize.me/api/job/src'):
+            self.id = re.search(r"(?<=\?id=)(.*?)(?=$)", string_).group(0)

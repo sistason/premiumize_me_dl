@@ -9,7 +9,7 @@ import datetime
 import subprocess
 import concurrent.futures
 
-from premiumizeme.objects import Transfer, Download, File, Folder
+from premiumizeme.objects import Transfer, Download, File, Folder, TransferSrc
 
 # Premiumize.me API Version
 __version__ = 3
@@ -151,6 +151,11 @@ class PremiumizeMeAPI:
         if response_json.get('error') == 'duplicate':
             logging.debug('Torrent was already in the transfer list, continuing...')
             return await self.get_transfer(response_json.get('id'))
+        if response_json.get('message') == 'You already added this job.':
+            src = TransferSrc(src)
+            for transfer in await self.get_transfers():
+                if transfer and transfer.src and transfer.src.id == src.id:
+                    return transfer
 
         logging.error('Could not upload torrent {}: {}'.format(torrent, response_json.get('message')))
         return
