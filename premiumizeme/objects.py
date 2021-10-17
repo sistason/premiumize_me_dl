@@ -1,6 +1,6 @@
 import datetime
 import re
-
+import urllib.parse
 
 def _convert_size(size):
     if type(size) is str and size.isdigit() or type(size) in [int, float]:
@@ -119,7 +119,7 @@ class TransferSrc:
         if id_re:
             self.id = id_re.group(0).upper() if id_re else None
             name_re = re.search(r"&dn=(.*?)(?=&|$)", string_)
-            self.name = name_re.group(0) if name_re else None
+            self.name = urllib.parse.unquote(name_re.group(1)) if name_re else None
             self.trackers = re.findall(r"&tr=(.*?)(?=&tr|$)", string_)
         if string_.startswith('https://www.premiumize.me/api/job/src'):
             self.id = re.search(r"(?<=\?id=)(.*?)(?=$)", string_).group(0)

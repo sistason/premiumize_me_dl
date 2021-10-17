@@ -8,6 +8,7 @@ import zipfile
 import datetime
 import subprocess
 import concurrent.futures
+from fuzzywuzzy import fuzz
 
 from premiumizeme.objects import Transfer, Download, File, Folder, TransferSrc
 
@@ -145,17 +146,21 @@ class PremiumizeMeAPI:
 
         response_text = await self._make_request("/transfer/create", data={'src': src})
         success, response_json = self._validate_to_json(response_text)
-        if success:
-            self.file_list_cached = None
-            return await self.get_transfer(response_json.get('id'))
-        if response_json.get('error') == 'duplicate':
-            logging.debug('Torrent was already in the transfer list, continuing...')
-            return await self.get_transfer(response_json.get('id'))
-        if response_json.get('message') == 'You already added this job.':
+        if success or response_json.get('message') == 'You already added this job.':
             src = TransferSrc(src)
-            for transfer in await self.get_transfers():
-                if transfer and transfer.src and transfer.src.id == src.id:
+            for transfer in await self.get_transfers(force=success):
+                if transfer.src and (transfer.src.id == src.id or transfer.id == response_json.get("id")):
                     return transfer
+                if transfer.name == src.name:
+                    return transfer
+            logging.debug("Transfer not found, getting nextbest...")
+
+            levenshtein_ratios = [(transfer, fuzz.ratio(transfer.name.lower(), src.name.lower())) for transfer in await self.get_transfers()]
+            plausible = [t for t in levenshtein_ratios if t[1] > 80]
+            if levenshtein_ratios and len(plausible) == 1:
+                return levenshtein_ratios[0][0]
+            
+            logging.warning("Job not found in transfers?")
 
         logging.error('Could not upload torrent {}: {}'.format(torrent, response_json.get('message')))
         return
