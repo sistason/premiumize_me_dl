@@ -3,3 +3,4 @@ requests
 aiohttp
 aiofiles
 fuzzywuzzy
+levenshtein
