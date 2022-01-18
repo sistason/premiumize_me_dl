@@ -155,7 +155,7 @@ class PremiumizeMeAPI:
                     return transfer
             logging.debug("Transfer not found, getting nextbest...")
 
-            levenshtein_ratios = [(transfer, fuzz.ratio(transfer.name.lower(), src.name.lower())) for transfer in await self.get_transfers()]
+            levenshtein_ratios = [(transfer, fuzz.ratio(transfer.name.lower() if transfer.name else "", src.name.lower() if src.name else "")) for transfer in await self.get_transfers()]
             plausible = [t for t in levenshtein_ratios if t[1] > 80]
             if levenshtein_ratios and len(plausible) == 1:
                 return levenshtein_ratios[0][0]
