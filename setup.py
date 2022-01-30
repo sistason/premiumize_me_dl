@@ -14,4 +14,5 @@ setup(name='Premiumize.me API',
         'Programming Language :: Python :: 3',
       ],
       packages=find_packages(),
+      scripts=['premiumizeme/premiumize_me_dl', 'premiumizeme/premiumize_me_ul'],
       )
