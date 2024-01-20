@@ -6,6 +6,8 @@ import re
 
 from premiumizeme.api import PremiumizeMeAPI
 
+logger = logging.getLogger(__name__)
+
 
 class PremiumizeMeCleaner:
     url = 'https://www.premiumize.me/api'
@@ -25,8 +27,9 @@ class PremiumizeMeCleaner:
             try:
                 self.prev_file = open(file_location, 'w+')
                 break
-            except (FileNotFoundError, PermissionError, TypeError) as f:
-                print(file_location, f)
+            except (PermissionError, TypeError) as e:
+                logger.error('Could not open prevfile-location!')
+                logger.error(e)
                 pass
 
     async def close(self):
@@ -58,7 +61,7 @@ class PremiumizeMeCleaner:
         failed_ = []
         for transfer in transfers:
             if transfer.status == 'error' and transfer.message.startswith('Could not add'):
-                logging.info("{} is failed, deleting!".format(transfer.name))
+                logger.info("{} is failed, deleting!".format(transfer.name))
                 failed_.append(transfer)
 
         return failed_
@@ -69,9 +72,9 @@ class PremiumizeMeCleaner:
         for transfer in transfers:
             if transfer.message is not None and (transfer.message == 'Loading...' or
                                                  re.match(pttrn_, transfer.message)):
-                logging.info("{} is stale!".format(transfer.name))
+                logger.info("{} is stale!".format(transfer.name))
                 if str(transfer.id) in self.last_transfer_ids:
-                    logging.info("\twas stale before, deleting".format(transfer.name))
+                    logger.info("\twas stale before, deleting".format(transfer.name))
                     stale_.append(transfer)
 
         return stale_

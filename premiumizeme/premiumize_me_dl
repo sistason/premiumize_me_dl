@@ -2,10 +2,14 @@
 import datetime
 import asyncio
 import logging
+import pathlib
 import sys
 import re
 
 from premiumizeme.api import PremiumizeMeAPI
+
+
+logger = logging.getLogger(__name__)
 
 
 class PremiumizeMeDownloader:
@@ -16,7 +20,7 @@ class PremiumizeMeDownloader:
 
         self.delete_after = datetime.timedelta(days=delete_after_download_days)
         self.only_cleanup = cleanup
-        self.download_directory = download_directory
+        self.download_directory = pathlib.Path(download_directory)
 
     async def close(self):
         await self.api.close()
@@ -46,19 +50,19 @@ class PremiumizeMeDownloader:
         if self.only_cleanup:
             success = True
         else:
-            success = await self.api.download_file(file_, self.download_directory)
+            success = await self.api.download(file_, self.download_directory)
 
         if success:
             await self._cleanup_item(file_)
         else:
-            logging.error('Could not download "{}"'.format(file_.name))
+            logger.error('Could not download "{}"'.format(file_.name))
 
     async def _cleanup_item(self, item):
         now = datetime.datetime.now()
         if self.delete_after.days < 0:
             return
 
-        logging.info('Cleaning up {} "{}"...'.format(item.type, item.name))
+        logger.info('Cleaning up {} "{}"...'.format(item.type, item.name))
         # Check if the file is old enough to delete or
         # if a folder is old enough, by checking if a file in that folder is old enough.
         if item.type == 'file' and item.created_at + self.delete_after < now or \
@@ -102,8 +106,7 @@ if __name__ == '__main__':
 
     args = argparser.parse_args()
 
-    logging.basicConfig(format='%(message)s',
-                        level=logging.INFO)
+    logging.basicConfig(format='%(message)s', level=logging.INFO)
 
     event_loop_ = asyncio.get_event_loop()
     dl = PremiumizeMeDownloader(args.download_directory, args.auth, event_loop_,

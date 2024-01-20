@@ -5,6 +5,8 @@ import sys
 
 from premiumizeme.api import PremiumizeMeAPI
 
+logger = logging.getLogger(__name__)
+
 
 class PremiumizeMeUploader:
     url = 'https://www.premiumize.me/api'
@@ -19,8 +21,8 @@ class PremiumizeMeUploader:
         download_ids = [asyncio.ensure_future(self.api.upload(torrent)) for torrent in torrents]
         responses = await asyncio.gather(*download_ids)
 
-        logging.info('Ids of uploaded files:')
-        logging.info('\n'.join(map(str, responses)))
+        logger.info('Ids of uploaded files:')
+        logger.info('\n'.join(map(str, responses)))
         return responses
 
     def __bool__(self):
@@ -38,8 +40,7 @@ if __name__ == '__main__':
 
     args = argparser.parse_args()
 
-    logging.basicConfig(format='%(message)s',
-                        level=logging.INFO)
+    logging.basicConfig(format='%(message)s', level=logging.INFO)
 
     event_loop_ = asyncio.get_event_loop()
     dl = PremiumizeMeUploader(args.auth, event_loop=event_loop_)

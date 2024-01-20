@@ -14,6 +14,7 @@ from premiumizeme.objects import Transfer, Download, File, Folder, TransferSrc
 
 # Premiumize.me API Version
 __version__ = 3
+logger = logging.getLogger(__name__)
 
 
 class PremiumizeMeAPI:
@@ -39,12 +40,14 @@ class PremiumizeMeAPI:
             await self.aiohttp_session.close()
 
     async def download(self, item, download_directory):
-        if type(item) in [File or Folder]:
+        if type(item) in [File, Download]:
             return await self.download_file(item, download_directory)
-        if type(item) == Transfer:
+        if type(item) is Folder:
+            return await self.download_folder(item, download_directory)
+        if type(item) is Transfer:
             return await self.download_transfer(item, download_directory)
         else:
-            logging.error('Unable to download "{}", unknown type'.format(item))
+            logger.error('Unable to download "{}", unknown type'.format(item))
             return False
 
     async def download_transfer(self, transfer, download_directory):
@@ -54,24 +57,20 @@ class PremiumizeMeAPI:
 
         for _ in range(5):
             transfer = await self.get_transfer(transfer.id)
-            await asyncio.sleep(1)
-            file_ = await self.get_file_from_transfer(transfer)
-            if file_:
-                return await self.download_file(file_, download_directory)
+            await asyncio.sleep(1)  # ???
+            content = await self.get_content_from_transfer(transfer)
+            if content:
+                return self.download(content, download_directory)
 
     async def wait_for_transfer(self, transfer):
         start = datetime.datetime.now()
-        finished = None
-        logging.info('Waiting for premiumize.me to finish downloading the torrent "{}"...'.format(transfer.name))
-        while finished is None:
+        logger.info('Waiting for premiumize.me to finish downloading the torrent "{}"...'.format(transfer.name))
+        while await asyncio.sleep(2):
             transfer = await self.get_transfer(transfer.id)
-            finished = self.is_transfer_finished(transfer, start)
-            logging.info('  {} | Status: {}; Message: {}'.format('Run' if transfer.is_running() else 'Idle',
+            logger.info('  {} | Status: {}; Message: {}'.format('Run' if transfer.is_running() else 'Idle',
                                                                  transfer.status, transfer.message))
-            if finished is None:
-                await asyncio.sleep(2)
-
-        return finished
+            if self.is_transfer_finished(transfer, start):
+                return True
 
     @staticmethod
     def is_transfer_finished(transfer, start_time):
@@ -79,7 +78,7 @@ class PremiumizeMeAPI:
             return None
         if transfer is not None and transfer.message == 'Loading...' and \
                 (datetime.datetime.now() - start_time).seconds > 10 * 60:
-            logging.error('Torrent {} didn\'t finish loading, aborted'.format(transfer.name))
+            logger.error('Torrent {} didn\'t finish loading, aborted'.format(transfer.name))
             return False
         return True
 
@@ -93,28 +92,17 @@ class PremiumizeMeAPI:
             await tasks
             return True
         else:
-            logging.error('Could not get direct-download link {}: {}'.format(src, response_json.get('message')))
+            logger.error('Could not get direct-download link {}: {}'.format(url, response_json.get('message')))
             return False
 
     async def download_file(self, item, download_directory):
-        file = None
         if type(item) is File or type(item) is Download:
             file = item
-        elif type(item) is Folder:
-            response_text = await self._make_request('/zip/generate',
-                                                     data={'folders[]': [item.id]})
-            success, response_json = self._validate_to_json(response_text)
-            if success:
-                file = Download(response_json, item)
-            else:
-                logging.error('Could not create zip "{}": {}'.format(item.name, response_json.get('message', '?')))
         else:
-            logging.error('Don\'t know how to download "{}"'.format(item))
-
-        if file is None:
+            logger.error('Don\'t know how to download "{}"'.format(item))
             return False
 
-        if not os.path.exists(download_directory):
+        if not download_directory.exists():
             os.makedirs(download_directory, exist_ok=True)
 
         if self._file_exists(file, download_directory):
@@ -122,9 +110,9 @@ class PremiumizeMeAPI:
 
         async with self.max_simultaneous_downloads:
             size_ = '({} MB)'.format(file.size_in_mb) if file.size_in_mb else ''
-            logging.info('Downloading {}{}...'.format(file.name, size_))
+            logger.info('Downloading {}{}...'.format(file.get_full_path(), size_))
 
-            file_destination = os.path.join(download_directory, file.name)
+            file_destination = download_directory / file.name
             success = await self.event_loop.run_in_executor(self.process_pool,
                                                             self._download_file_wget_process,
                                                             file, file_destination)
@@ -133,9 +121,16 @@ class PremiumizeMeAPI:
 
             return success
 
+    async def download_folder(self, folder, download_directory):
+        download_directory = download_directory / folder.name
+
+        for content in await self.list_folder(folder):
+            await self.download(content, download_directory)
+
     @staticmethod
     def _download_file_wget_process(file, file_destination):
-        return subprocess.run(['wget', file.link, '-qO', file_destination, '--show-progress']).returncode == 0
+        # --continue even though premiumize.me does not (yet?) implement it
+        return subprocess.run(['wget', '-qO', '--continue', '--show-progress', file.link, file_destination]).returncode == 0
 
     async def upload(self, torrent):
         src = None
@@ -153,16 +148,16 @@ class PremiumizeMeAPI:
                     return transfer
                 if transfer.name == src.name:
                     return transfer
-            logging.debug("Transfer not found, getting nextbest...")
+            logger.debug("Transfer not found, getting nextbest...")
 
             levenshtein_ratios = [(transfer, fuzz.ratio(transfer.name.lower() if transfer.name else "", src.name.lower() if src.name else "")) for transfer in await self.get_transfers()]
             plausible = [t for t in levenshtein_ratios if t[1] > 80]
             if levenshtein_ratios and len(plausible) == 1:
                 return levenshtein_ratios[0][0]
             
-            logging.warning("Job not found in transfers?")
+            logger.warning("Job not found in transfers?")
 
-        logging.error('Could not upload torrent {}: {}'.format(torrent, response_json.get('message')))
+        logger.error('Could not upload torrent {}: {}'.format(torrent, response_json.get('message')))
         return
 
     async def delete(self, item_):
@@ -175,7 +170,7 @@ class PremiumizeMeAPI:
         elif type(item_) is Transfer:
             response_text = await self._make_request('/transfer/delete', data={'id': item_.id})
         else:
-            logging.error('Unknown type of file to delete: {}'.format(item_))
+            logger.error('Unknown type of file to delete: {}'.format(item_))
             return True
         success, response_json = self._validate_to_json(response_text)
         if success:
@@ -185,10 +180,10 @@ class PremiumizeMeAPI:
                 self.file_list_cached = None
             return True
 
-        logging.error('Could not delete file {}: {}'.format(item_, response_json.get('message')))
+        logger.error('Could not delete file {}: {}'.format(item_, response_json.get('message')))
         return False
 
-    async def get_file_from_transfer(self, transfer_):
+    async def get_content_from_transfer(self, transfer_):
         if type(transfer_) is not Transfer:
             return
         for file_ in await self.get_files():
@@ -196,7 +191,7 @@ class PremiumizeMeAPI:
                (file_.type == 'file' and file_.id == transfer_.file_id):
                 return file_
 
-        logging.error('No file for transfer "{}" found, status is: "{}"'.format(transfer_.name, transfer_.status_msg()))
+        logger.error('No content for transfer "{}" found, status is: "{}"'.format(transfer_.name, transfer_.status_msg()))
 
     async def get_files(self, force=False):
         now = datetime.datetime.now()
@@ -214,22 +209,24 @@ class PremiumizeMeAPI:
             return folder_list
 
     async def list_folder(self, folder=None):
+        data = {'includebreadcrumbs': True}
         if folder:
-            folder = {'id': folder.id}
-        response_text = await self._make_request('/folder/list', data=folder)
+            data['id'] = folder.id
+        response_text = await self._make_request('/folder/list', data=data)
         success, response_json = self._validate_to_json(response_text)
         if success:
             file_list = []
+            breadcrumbs = response_json.get('breadcrumbs', [])
             for properties_ in response_json.get('content', []):
                 if not properties_:
                     continue
                 if properties_.get('type', '') == 'file':
-                    file_list.append(File(properties_))
+                    file_list.append(File(properties_, breadcrumbs))
                 if properties_.get('type', '') == 'folder':
-                    file_list.append(Folder(properties_))
+                    file_list.append(Folder(properties_, breadcrumbs))
             return file_list
         else:
-            logging.error('Error while getting folder "{}". Was: {}'.format(folder, response_json.get('message')))
+            logger.error('Error while getting folder "{}". Was: {}'.format(folder, response_json.get('message')))
             return []
 
     """
@@ -264,7 +261,7 @@ class PremiumizeMeAPI:
                     transfer_list.append(Folder(properties_))
             return transfer_list
         else:
-            logging.error('Error while getting folder "{}". Was: {}'.format(transfer, response_json.get('message')))
+            logger.error('Error while getting folder "{}". Was: {}'.format(transfer, response_json.get('message')))
             return []
         """
     async def get_transfers(self, force=False):
@@ -296,7 +293,7 @@ class PremiumizeMeAPI:
                     transfers.append(transfer_)
             self.folder_list_cache_valid_until = datetime.datetime.now() + datetime.timedelta(seconds=self.CACHE_TIME)
             return transfers
-        logging.error('Error while getting transfers. Was: {}'.format(response_json.get('message')))
+        logger.error('Error while getting transfers. Was: {}'.format(response_json.get('message')))
 
     async def _make_request(self, url, data=None):
         """ Do a request, take care of the login, timeouts and exceptions """
@@ -314,12 +311,12 @@ class PremiumizeMeAPI:
                     if r_.status == 200:
                         return text
                     else:
-                        logging.error('Calling {} returned status code {}, retrying...'.format(url, r_.status))
+                        logger.error('Calling {} returned status code {}, retrying...'.format(url, r_.status))
             except (asyncio.TimeoutError, aiohttp.ClientConnectionError):
-                logging.warning('Timeout, retrying...')
+                logger.warning('Timeout, retrying...')
 
             except Exception as e:
-                logging.error('Caught Exception "{}" while making a get-request to "{}"'.format(e.__class__, url))
+                logger.error('Caught Exception "{}" while making a get-request to "{}"'.format(e.__class__, url))
                 return json.dumps({'error': 'true', 'message': str(e)})
 
             await asyncio.sleep(1)
@@ -337,10 +334,10 @@ class PremiumizeMeAPI:
         if os.path.exists(path_) and file_.size > -1:
             try:
                 if file_.size and file_.size * 0.999 < self._get_size(path_) < file_.size * 1.001:
-                    logging.info('Skipped "{}", already exists'.format(file_.name))
+                    logger.info('Skipped "{}", already exists'.format(file_.get_full_path()))
                     return True
             except OSError as e:
-                logging.warning('Could not get size of file "{}": {}'.format(file_.name, e))
+                logger.warning('Could not get size of file "{}": {}'.format(file_.get_full_path(), e))
         return False
 
     def _get_size(self, path_):
@@ -357,7 +354,7 @@ class PremiumizeMeAPI:
             z.extractall(path=os.path.dirname(file_destination))
             os.remove(file_destination)
         except zipfile.error as e:
-            logging.warning('Unzipping of "{}" failed: {}'.format(file_destination, e))
+            logger.warning('Unzipping of "{}" failed: {}'.format(file_destination, e))
 
     @staticmethod
     def _read_auth(auth):
@@ -376,7 +373,7 @@ class PremiumizeMeAPI:
                 f.write(':'.join([username, password]))
 
         if not (username and password):
-            logging.error('Authentication file not found or credentials were malformed!')
+            logger.error('Authentication file not found or credentials were malformed!')
             return {}
 
         return {'customer_id': username, 'pin': password}

@@ -14,7 +14,7 @@ def _convert_ts(ts):
 
 
 class BaseAttributes:
-    def __init__(self, properties):
+    def __init__(self, properties, breadcrumbs):
         if type(properties) is dict:
             self.name = properties.get('name', '<not yet set>')
             self.id = properties.get('id', '')
@@ -24,6 +24,8 @@ class BaseAttributes:
         else:
             print('?')
             print(properties)
+
+        self.breadcrumbs = breadcrumbs
 
     def matches(self, regex):
         return bool(regex.search(self.name))
@@ -35,20 +37,24 @@ class BaseAttributes:
         return {'id': self.id, 'name': self.name, 'type': self.type}
 
     def __str__(self):
-        return '{}: {}'.format(self.id, self.name)
+        return "{}: {}".format(self.id, self.name)
+
+    def get_full_path(self):
+        # ignore "My Files" as base folder
+        return "{}/{}".format('/'.join([b.get('name') for b in self.breadcrumbs[1:]]), self.name)
 
 
 class Folder(BaseAttributes):
-    def __init__(self, properties):
-        super().__init__(properties)
+    def __init__(self, properties, breadcrumbs):
+        super().__init__(properties, breadcrumbs)
 
     def __str__(self):
-        return '{s.name}: {s.id}'.format(s=self)
+        return "{s.name}: {s.id}".format(s=self)
     
 
 class File(BaseAttributes):
-    def __init__(self, properties):
-        super().__init__(properties)
+    def __init__(self, properties, breadcrumbs):
+        super().__init__(properties, breadcrumbs)
 
         self.transcode_status = properties.get('transcode_status', '')
         self.link = properties.get('link', '')
@@ -59,12 +65,12 @@ class File(BaseAttributes):
         self.size_in_mb = int(self.size/1024/1024)
 
     def __str__(self):
-        return '{s.id}: {s.name} ({s.size_in_mb}MB)'.format(s=self)
+        return "{s.id}: {s.name} ({s.size_in_mb}MB)".format(s=self)
 
 
 class Transfer(BaseAttributes):
     def __init__(self, properties):
-        super().__init__(properties)
+        super().__init__(properties, [])
         self.size = _convert_size(properties.get('size', 0))
         self.size_in_mb = int(self.size/1024/1024)
 
