@@ -130,7 +130,7 @@ class PremiumizeMeAPI:
     @staticmethod
     def _download_file_wget_process(file, file_destination):
         # --continue even though premiumize.me does not (yet?) implement it
-        return subprocess.run(['wget', '-qO', '--continue', '--show-progress', file.link, file_destination]).returncode == 0
+        return subprocess.run(['wget', '--continue', '--show-progress', file.link, '-qO', file_destination]).returncode == 0
 
     async def upload(self, torrent):
         src = None
