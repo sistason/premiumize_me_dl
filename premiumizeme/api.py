@@ -124,8 +124,12 @@ class PremiumizeMeAPI:
     async def download_folder(self, folder, download_directory):
         download_directory = download_directory / folder.name
 
+        success = True
         for content in await self.list_folder(folder):
-            await self.download(content, download_directory)
+            if not await self.download(content, download_directory):
+                success = False
+
+        return success
 
     @staticmethod
     def _download_file_wget_process(file, file_destination):
