@@ -67,8 +67,9 @@ class PremiumizeMeAPI:
         logger.info('Waiting for premiumize.me to finish downloading the torrent "{}"...'.format(transfer.name))
         while not await asyncio.sleep(2):
             transfer = await self.get_transfer(transfer.id)
-            logger.info('  {} | Status: {}; Message: {}'.format('Run' if transfer.is_running() else 'Idle',
-                                                                 transfer.status, transfer.message))
+            if transfer is not None:
+                logger.info('  {} | Status: {}; Message: {}'.format('Run' if transfer.is_running() else 'Idle',
+                                                                     transfer.status, transfer.message))
             if self.is_transfer_finished(transfer, start):
                 return True
 
