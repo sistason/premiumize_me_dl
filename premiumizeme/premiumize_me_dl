@@ -40,10 +40,10 @@ class PremiumizeMeDownloader:
         regex = re.compile(filter_regex, re.IGNORECASE)
 
         transfer_list = await self.api.get_transfers()
-        if not transfer_list:
+        matched_transfers = [file_ for file_ in transfer_list if file_.matches(regex)]
+        if not matched_transfers:
             print("no results")
 
-        matched_transfers = [file_ for file_ in transfer_list if file_.matches(regex)]
         max_length = len(max(matched_transfers, key=lambda f: len(f.name)).name)
         for transfer in matched_transfers:
             print('{0:<{1}}: {2}'.format(transfer.name, max_length, transfer.status_msg()))
